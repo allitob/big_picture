@@ -121,11 +121,12 @@
   <h1>Big picture</h1>
   <div id="status" class="status">Connecting…</div>
 
-  <div id="setup" class="form-card" style="display:none;">
-    <p class="muted" style="margin-top:0;">Enter your sync ID to connect this device to your data. (Find it in your other device's settings, or pick a new private string if this is your first device.)</p>
-    <input id="setup-doc-id" placeholder="Sync ID" autocapitalize="off" autocorrect="off" spellcheck="false" />
-    <button id="setup-save-btn">Connect</button>
-  </div>
+  <form id="setup" class="form-card" style="display:none;" autocomplete="on">
+    <p class="muted" style="margin-top:0;">Enter your sync ID to connect this device to your data. (Find it in your other device's settings, or pick a new private string if this is your first device.) Your browser can offer to save this like a password.</p>
+    <input id="setup-label" name="username" value="big-picture" autocomplete="username" style="position:absolute; left:-9999px;" tabindex="-1" aria-hidden="true" />
+    <input id="setup-doc-id" name="password" type="password" placeholder="Sync ID" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
+    <button type="submit" id="setup-save-btn">Connect</button>
+  </form>
 
   <div id="app" style="display:none;">
     <div id="nudge" class="nudge"></div>
@@ -237,7 +238,8 @@
     appEl.style.display = 'block';
   }
 
-  document.getElementById('setup-save-btn').addEventListener('click', () => {
+  setupEl.addEventListener('submit', (e) => {
+    e.preventDefault();
     const id = setupInput.value.trim();
     if (!id) return;
     localStorage.setItem(DOC_ID_KEY, id);
