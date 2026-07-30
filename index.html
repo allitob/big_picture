@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>Big Picture</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Big Picture" />
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f5f4f0;
+    --text: #1a1a18;
+    --text-secondary: #5f5e5a;
+    --text-muted: #888780;
+    --border: #e2e0d8;
+    --warning-bg: #faeeda;
+    --warning-text: #854f0b;
+    --danger-text: #a32d2d;
+    --accent: #185fa5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a;
+      --surface: #2c2c2a;
+      --text: #f1efe8;
+      --text-secondary: #b4b2a9;
+      --text-muted: #888780;
+      --border: #444441;
+      --warning-bg: #412402;
+      --warning-text: #fac775;
+      --danger-text: #f09595;
+      --accent: #85b7eb;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 1.5rem; }
+  h2 { font-size: 16px; font-weight: 600; margin: 0; }
+  .section { margin-bottom: 2rem; }
+  .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+  button {
+    font-family: inherit;
+    font-size: 14px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+  }
+  button:active { opacity: 0.7; }
+  input, textarea, select {
+    width: 100%;
+    font-family: inherit;
+    font-size: 15px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  textarea { min-height: 70px; resize: vertical; }
+  .card {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .card p { margin: 0; }
+  .bet-name { font-weight: 600; font-size: 15px; margin-bottom: 2px !important; }
+  .bet-why { font-size: 13px; color: var(--text-secondary); }
+  .badge { font-size: 12px; white-space: nowrap; color: var(--text-muted); }
+  .muted { color: var(--text-muted); font-size: 14px; }
+  .log-entry { border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px; }
+  .log-date { font-size: 12px; color: var(--text-muted); margin: 0 0 2px !important; }
+  .log-text { font-size: 14px; }
+  .form-card {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .btn-row { display: flex; gap: 8px; }
+  .nudge {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+    margin-bottom: 1.5rem;
+    display: none;
+  }
+  .divider { border-top: 1px solid var(--border); padding-top: 1.5rem; }
+  .status { font-size: 13px; color: var(--text-muted); text-align: center; padding: 2rem 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Big picture</h1>
+  <div id="status" class="status">Connecting…</div>
+
+  <div id="setup" class="form-card" style="display:none;">
+    <p class="muted" style="margin-top:0;">Enter your sync ID to connect this device to your data. (Find it in your other device's settings, or pick a new private string if this is your first device.)</p>
+    <input id="setup-doc-id" placeholder="Sync ID" autocapitalize="off" autocorrect="off" spellcheck="false" />
+    <button id="setup-save-btn">Connect</button>
+  </div>
+
+  <div id="app" style="display:none;">
+    <div id="nudge" class="nudge"></div>
+
+    <div class="section">
+      <div class="row">
+        <h2>Bets</h2>
+        <button id="add-bet-btn">+ Add bet</button>
+      </div>
+      <div id="bets-list"></div>
+    </div>
+
+    <div id="add-bet-form" class="form-card" style="display:none;">
+      <input id="bet-name" placeholder="Name (e.g. Payload gantry)" />
+      <textarea id="bet-why" placeholder="Why it matters, in a sentence"></textarea>
+      <div class="btn-row">
+        <button id="save-bet-btn">Save bet</button>
+        <button id="cancel-bet-btn">Cancel</button>
+      </div>
+    </div>
+
+    <div class="section divider">
+      <h2 style="margin-bottom:0.75rem;">Log today</h2>
+      <select id="log-bet-select">
+        <option value="">No specific bet / general note</option>
+      </select>
+      <textarea id="log-text" placeholder="What did you actually spend attention on today?"></textarea>
+      <button id="save-log-btn">Add entry</button>
+    </div>
+
+    <div class="section divider">
+      <h2 style="margin-bottom:0.75rem;">Recent log</h2>
+      <div id="log-list"></div>
+    </div>
+
+    <p class="muted" style="text-align:center;"><a id="change-sync-id" href="#" style="color:inherit;">change sync ID</a></p>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // ---- PASTE YOUR FIREBASE CONFIG HERE ----
+  const firebaseConfig = {
+    apiKey: "AIzaSyB_4N7Z2a_qQwaL-aY-47WDAXZeqS8fRUI",
+    authDomain: "big-picture-8bd64.firebaseapp.com",
+    projectId: "big-picture-8bd64",
+    storageBucket: "big-picture-8bd64.firebasestorage.app",
+    messagingSenderId: "286061786704",
+    appId: "1:286061786704:web:d0b8196cbb701c32920355"
+  };
+  // ------------------------------------------
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  let data = { bets: [], log: [] };
+  let docRef = null;
+  let authReady = false;
+
+  const statusEl = document.getElementById('status');
+  const appEl = document.getElementById('app');
+  const setupEl = document.getElementById('setup');
+  const setupInput = document.getElementById('setup-doc-id');
+
+  // The sync ID is never stored in source (this repo is public) — each device
+  // stores its own copy in localStorage after you enter it once. It's just a
+  // private string that names your document in Firestore; Firestore rules only
+  // require an authenticated (anonymous) session, so keeping this ID out of the
+  // public repo is what actually keeps your data private.
+  const DOC_ID_KEY = 'bp-doc-id';
+
+  onAuthStateChanged(auth, (user) => {
+    if (!user) return;
+    authReady = true;
+    tryConnect();
+  });
+
+  signInAnonymously(auth).catch((err) => {
+    statusEl.textContent = "Couldn't connect: " + err.message;
+  });
+
+  function tryConnect() {
+    if (!authReady) return;
+    const savedId = localStorage.getItem(DOC_ID_KEY);
+    if (!savedId) {
+      statusEl.style.display = 'none';
+      setupEl.style.display = 'block';
+      setupInput.focus();
+      return;
+    }
+    setupEl.style.display = 'none';
+    connect(savedId);
+  }
+
+  async function connect(docId) {
+    docRef = doc(db, "bigpicture", docId);
+    statusEl.style.display = 'block';
+    statusEl.textContent = 'Connecting…';
+    await load();
+    statusEl.style.display = 'none';
+    appEl.style.display = 'block';
+  }
+
+  document.getElementById('setup-save-btn').addEventListener('click', () => {
+    const id = setupInput.value.trim();
+    if (!id) return;
+    localStorage.setItem(DOC_ID_KEY, id);
+    setupEl.style.display = 'none';
+    connect(id);
+  });
+
+  document.getElementById('change-sync-id').addEventListener('click', (e) => {
+    e.preventDefault();
+    appEl.style.display = 'none';
+    setupInput.value = localStorage.getItem(DOC_ID_KEY) || '';
+    setupEl.style.display = 'block';
+    setupInput.focus();
+  });
+
+  function fmtDate(d) {
+    return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  function daysSince(d) {
+    return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+  }
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  async function load() {
+    try {
+      const snap = await getDoc(docRef);
+      if (snap.exists()) data = snap.data();
+    } catch (e) {
+      console.error('load failed', e);
+    }
+    render();
+  }
+
+  async function save() {
+    try {
+      await setDoc(docRef, data);
+    } catch (e) {
+      console.error('save failed', e);
+      alert('Save failed: ' + e.message);
+    }
+  }
+
+  function lastTouch(betId) {
+    const entries = data.log.filter(l => l.betId === betId);
+    if (!entries.length) return null;
+    return entries.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b).date;
+  }
+
+  function renderNudge() {
+    const nudge = document.getElementById('nudge');
+    if (!data.log.length) { nudge.style.display = 'none'; return; }
+    const lastEntry = [...data.log].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    const ds = daysSince(lastEntry.date);
+    if (ds >= 2) {
+      nudge.style.display = 'block';
+      nudge.textContent = ds + ' days since your last log entry. Quick check-in?';
+    } else {
+      nudge.style.display = 'none';
+    }
+  }
+
+  function render() {
+    renderNudge();
+
+    const betsList = document.getElementById('bets-list');
+    betsList.innerHTML = '';
+    if (!data.bets.length) {
+      betsList.innerHTML = '<p class="muted">No bets yet. Add the big things you are actually investing in.</p>';
+    }
+    data.bets.forEach(bet => {
+      const lt = lastTouch(bet.id);
+      const ds = lt ? daysSince(lt) : null;
+      let badgeText = 'Not logged yet';
+      let badgeColor = 'var(--text-muted)';
+      if (ds !== null) {
+        badgeText = ds === 0 ? 'Touched today' : ds === 1 ? 'Touched yesterday' : 'Touched ' + ds + ' days ago';
+        if (ds >= 14) badgeColor = 'var(--danger-text)';
+        else if (ds >= 7) badgeColor = 'var(--warning-text)';
+        else badgeColor = 'var(--text-secondary)';
+      }
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = '<div style="min-width:0;">' +
+        '<p class="bet-name">' + escapeHtml(bet.name) + '</p>' +
+        '<p class="bet-why">' + escapeHtml(bet.why || '') + '</p>' +
+        '</div>' +
+        '<span class="badge" style="color:' + badgeColor + '">' + badgeText + '</span>';
+      betsList.appendChild(card);
+    });
+
+    const sel = document.getElementById('log-bet-select');
+    sel.innerHTML = '<option value="">No specific bet / general note</option>';
+    data.bets.forEach(bet => {
+      const opt = document.createElement('option');
+      opt.value = bet.id;
+      opt.textContent = bet.name;
+      sel.appendChild(opt);
+    });
+
+    const logList = document.getElementById('log-list');
+    logList.innerHTML = '';
+    const recent = [...data.log].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 15);
+    if (!recent.length) {
+      logList.innerHTML = '<p class="muted">No entries yet.</p>';
+    }
+    recent.forEach(entry => {
+      const bet = data.bets.find(b => b.id === entry.betId);
+      const row = document.createElement('div');
+      row.className = 'log-entry';
+      row.innerHTML = '<p class="log-date">' + fmtDate(entry.date) + (bet ? ' · ' + escapeHtml(bet.name) : '') + '</p>' +
+        '<p class="log-text">' + escapeHtml(entry.text) + '</p>';
+      logList.appendChild(row);
+    });
+  }
+
+  document.getElementById('add-bet-btn').addEventListener('click', () => {
+    document.getElementById('add-bet-form').style.display = 'block';
+  });
+  document.getElementById('cancel-bet-btn').addEventListener('click', () => {
+    document.getElementById('add-bet-form').style.display = 'none';
+    document.getElementById('bet-name').value = '';
+    document.getElementById('bet-why').value = '';
+  });
+  document.getElementById('save-bet-btn').addEventListener('click', async () => {
+    const name = document.getElementById('bet-name').value.trim();
+    const why = document.getElementById('bet-why').value.trim();
+    if (!name) return;
+    data.bets.push({ id: 'bet_' + Date.now(), name, why, created: new Date().toISOString() });
+    document.getElementById('bet-name').value = '';
+    document.getElementById('bet-why').value = '';
+    document.getElementById('add-bet-form').style.display = 'none';
+    render();
+    await save();
+  });
+  document.getElementById('save-log-btn').addEventListener('click', async () => {
+    const text = document.getElementById('log-text').value.trim();
+    const betId = document.getElementById('log-bet-select').value || null;
+    if (!text) return;
+    data.log.push({ id: 'log_' + Date.now(), text, betId, date: new Date().toISOString() });
+    document.getElementById('log-text').value = '';
+    render();
+    await save();
+  });
+</script>
+</body>
+</html>
