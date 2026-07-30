@@ -85,7 +85,10 @@
   .card-actions { display: flex; gap: 12px; margin-top: 6px; }
   .link-btn { font-size: 12px; color: var(--accent); text-decoration: none; cursor: pointer; background: none; border: none; padding: 0; }
   .history-panel { margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); }
-  .history-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 2px 0; }
+  .history-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 4px 0; cursor: pointer; }
+  .history-content { padding: 0 0 8px; border-top: 1px dashed var(--border); margin-top: -2px; }
+  .history-content p { margin: 6px 0 0 !important; }
+  .stale-flag { display: inline-block; font-size: 11px; color: var(--warning-text); background: var(--warning-bg); padding: 2px 6px; border-radius: 6px; margin-top: 4px; }
   .bet-name { font-weight: 600; font-size: 15px; margin-bottom: 2px !important; }
   .bet-why { font-size: 13px; color: var(--text-secondary); }
   .badge { font-size: 12px; white-space: nowrap; color: var(--text-muted); }
@@ -272,14 +275,40 @@
     return item.history;
   }
 
-  function appendHistoryPanel(container, history) {
+  // Which version of a bet was current as of a given date (used to flag log
+  // entries logged against a bet that has since been edited).
+  function betVersionAtDate(bet, dateStr) {
+    const t = new Date(dateStr).getTime();
+    let v = bet.history[0].v;
+    bet.history.forEach(h => {
+      if (new Date(h.date).getTime() <= t) v = h.v;
+    });
+    return v;
+  }
+
+  let expandedVersionKey = null;
+
+  function appendHistoryPanel(container, history, keyPrefix, renderContent) {
     const panel = document.createElement('div');
     panel.className = 'history-panel';
     [...history].reverse().forEach(h => {
+      const key = keyPrefix + '-v' + h.v;
+      const rowWrap = document.createElement('div');
       const row = document.createElement('div');
       row.className = 'history-row';
       row.innerHTML = '<span>v' + h.v + '</span><span>' + fmtDate(h.date) + '</span>';
-      panel.appendChild(row);
+      row.addEventListener('click', () => {
+        expandedVersionKey = expandedVersionKey === key ? null : key;
+        render();
+      });
+      rowWrap.appendChild(row);
+      if (expandedVersionKey === key) {
+        const content = document.createElement('div');
+        content.className = 'history-content';
+        renderContent(content, h);
+        rowWrap.appendChild(content);
+      }
+      panel.appendChild(rowWrap);
     });
     container.appendChild(panel);
   }
@@ -420,7 +449,17 @@
         wrapper.appendChild(actions);
 
         if (expandedBetHistory === bet.id) {
-          appendHistoryPanel(wrapper, bet.history);
+          appendHistoryPanel(wrapper, bet.history, 'bet-' + bet.id, (content, h) => {
+            const nameP = document.createElement('p');
+            nameP.className = 'bet-name';
+            nameP.style.fontSize = '13px';
+            nameP.textContent = h.name;
+            const whyP = document.createElement('p');
+            whyP.className = 'bet-why';
+            whyP.textContent = h.why || '';
+            content.appendChild(nameP);
+            content.appendChild(whyP);
+          });
         }
       }
 
@@ -488,6 +527,17 @@
         wrapper.appendChild(dateP);
         wrapper.appendChild(textP);
 
+        if (bet) {
+          const versionAtLog = betVersionAtDate(bet, entry.date);
+          const currentVersion = bet.history.length;
+          if (versionAtLog !== currentVersion) {
+            const flag = document.createElement('span');
+            flag.className = 'stale-flag';
+            flag.textContent = 'Bet has changed since this entry (was v' + versionAtLog + ', now v' + currentVersion + ')';
+            wrapper.appendChild(flag);
+          }
+        }
+
         const actions = document.createElement('div');
         actions.className = 'card-actions';
         const editLink = document.createElement('a');
@@ -516,7 +566,12 @@
         wrapper.appendChild(actions);
 
         if (expandedLogHistory === entry.id) {
-          appendHistoryPanel(wrapper, entry.history);
+          appendHistoryPanel(wrapper, entry.history, 'log-' + entry.id, (content, h) => {
+            const p = document.createElement('p');
+            p.className = 'log-text';
+            p.textContent = h.text;
+            content.appendChild(p);
+          });
         }
       }
 
