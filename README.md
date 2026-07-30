@@ -65,6 +65,14 @@ The GitHub repo for this app is **public** (GitHub Pages requires that on a free
 4. GitHub gives you a URL like `https://yourusername.github.io/reponame/`. Open that on your phone and laptop and enter your sync ID on each.
 5. On your phone, open it in Safari/Chrome and use **Add to Home Screen** so it opens full-screen like an app.
 
+## 7. Optional: get emailed if you go quiet
+
+The in-app nudge only shows up while the app is open. To get an actual email after a couple of days of inactivity, see [`nudge/README.md`](nudge/README.md) — a free Google Apps Script on a daily timer, no server or paid plan required.
+
+## 8. Optional: export your data
+
+Use the **Export** buttons at the bottom of the app to download two CSVs: an `activity` log (every version of every bet/log entry, chronologically) and a `versions` table (every item grouped with all its own versions). Handy for feeding into an LLM to review your own patterns.
+
 ## Notes
 
 - Nobody can find or guess your Firestore document without your sync ID — but it isn't password-protected beyond that, and the source code (minus your sync ID) is publicly visible on GitHub. Don't post the GitHub Pages URL or your sync ID anywhere public.
