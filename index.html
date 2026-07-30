@@ -73,13 +73,19 @@
     background: var(--surface);
     border-radius: 12px;
     padding: 0.9rem 1rem;
+    margin-bottom: 8px;
+  }
+  .card-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    margin-bottom: 8px;
   }
   .card p { margin: 0; }
+  .card-actions { display: flex; gap: 12px; margin-top: 6px; }
+  .link-btn { font-size: 12px; color: var(--accent); text-decoration: none; cursor: pointer; background: none; border: none; padding: 0; }
+  .history-panel { margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); }
+  .history-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 2px 0; }
   .bet-name { font-weight: 600; font-size: 15px; margin-bottom: 2px !important; }
   .bet-why { font-size: 13px; color: var(--text-secondary); }
   .badge { font-size: 12px; white-space: nowrap; color: var(--text-muted); }
@@ -179,6 +185,10 @@
   let data = { bets: [], log: [] };
   let docRef = null;
   let authReady = false;
+  let editingBetId = null;
+  let expandedBetHistory = null;
+  let editingLogId = null;
+  let expandedLogHistory = null;
 
   const statusEl = document.getElementById('status');
   const appEl = document.getElementById('app');
@@ -252,6 +262,28 @@
     return d.innerHTML;
   }
 
+  // Lazily synthesizes a v1 history entry for items saved before versioning existed.
+  function ensureHistory(item, fields) {
+    if (!item.history || !item.history.length) {
+      const first = { v: 1, date: item.created || new Date().toISOString() };
+      fields.forEach(f => { first[f] = item[f]; });
+      item.history = [first];
+    }
+    return item.history;
+  }
+
+  function appendHistoryPanel(container, history) {
+    const panel = document.createElement('div');
+    panel.className = 'history-panel';
+    [...history].reverse().forEach(h => {
+      const row = document.createElement('div');
+      row.className = 'history-row';
+      row.innerHTML = '<span>v' + h.v + '</span><span>' + fmtDate(h.date) + '</span>';
+      panel.appendChild(row);
+    });
+    container.appendChild(panel);
+  }
+
   async function load() {
     try {
       const snap = await getDoc(docRef);
@@ -299,24 +331,100 @@
       betsList.innerHTML = '<p class="muted">No bets yet. Add the big things you are actually investing in.</p>';
     }
     data.bets.forEach(bet => {
-      const lt = lastTouch(bet.id);
-      const ds = lt ? daysSince(lt) : null;
-      let badgeText = 'Not logged yet';
-      let badgeColor = 'var(--text-muted)';
-      if (ds !== null) {
-        badgeText = ds === 0 ? 'Touched today' : ds === 1 ? 'Touched yesterday' : 'Touched ' + ds + ' days ago';
-        if (ds >= 14) badgeColor = 'var(--danger-text)';
-        else if (ds >= 7) badgeColor = 'var(--warning-text)';
-        else badgeColor = 'var(--text-secondary)';
+      ensureHistory(bet, ['name', 'why']);
+      const wrapper = document.createElement('div');
+      wrapper.className = 'card';
+
+      if (editingBetId === bet.id) {
+        const nameInput = document.createElement('input');
+        nameInput.value = bet.name;
+        nameInput.placeholder = 'Name';
+        const whyInput = document.createElement('textarea');
+        whyInput.value = bet.why || '';
+        whyInput.placeholder = 'Why it matters';
+        const btnRow = document.createElement('div');
+        btnRow.className = 'btn-row';
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Save';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        btnRow.appendChild(saveBtn);
+        btnRow.appendChild(cancelBtn);
+        wrapper.appendChild(nameInput);
+        wrapper.appendChild(whyInput);
+        wrapper.appendChild(btnRow);
+
+        saveBtn.addEventListener('click', async () => {
+          const newName = nameInput.value.trim();
+          const newWhy = whyInput.value.trim();
+          if (!newName) return;
+          const changed = newName !== bet.name || newWhy !== (bet.why || '');
+          bet.name = newName;
+          bet.why = newWhy;
+          if (changed) {
+            bet.history.push({ v: bet.history.length + 1, date: new Date().toISOString(), name: newName, why: newWhy });
+          }
+          editingBetId = null;
+          render();
+          await save();
+        });
+        cancelBtn.addEventListener('click', () => {
+          editingBetId = null;
+          render();
+        });
+      } else {
+        const lt = lastTouch(bet.id);
+        const ds = lt ? daysSince(lt) : null;
+        let badgeText = 'Not logged yet';
+        let badgeColor = 'var(--text-muted)';
+        if (ds !== null) {
+          badgeText = ds === 0 ? 'Touched today' : ds === 1 ? 'Touched yesterday' : 'Touched ' + ds + ' days ago';
+          if (ds >= 14) badgeColor = 'var(--danger-text)';
+          else if (ds >= 7) badgeColor = 'var(--warning-text)';
+          else badgeColor = 'var(--text-secondary)';
+        }
+        const row = document.createElement('div');
+        row.className = 'card-row';
+        row.innerHTML = '<div style="min-width:0;">' +
+          '<p class="bet-name">' + escapeHtml(bet.name) + '</p>' +
+          '<p class="bet-why">' + escapeHtml(bet.why || '') + '</p>' +
+          '</div>' +
+          '<span class="badge" style="color:' + badgeColor + '">' + badgeText + '</span>';
+        wrapper.appendChild(row);
+
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+        const editLink = document.createElement('a');
+        editLink.href = '#';
+        editLink.className = 'link-btn';
+        editLink.textContent = 'Edit';
+        editLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          editingBetId = bet.id;
+          render();
+        });
+        actions.appendChild(editLink);
+
+        if (bet.history.length > 1) {
+          const historyLink = document.createElement('a');
+          historyLink.href = '#';
+          historyLink.className = 'link-btn';
+          historyLink.textContent = (expandedBetHistory === bet.id ? 'Hide history' : 'History (v' + bet.history.length + ')');
+          historyLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            expandedBetHistory = expandedBetHistory === bet.id ? null : bet.id;
+            render();
+          });
+          actions.appendChild(historyLink);
+        }
+        wrapper.appendChild(actions);
+
+        if (expandedBetHistory === bet.id) {
+          appendHistoryPanel(wrapper, bet.history);
+        }
       }
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = '<div style="min-width:0;">' +
-        '<p class="bet-name">' + escapeHtml(bet.name) + '</p>' +
-        '<p class="bet-why">' + escapeHtml(bet.why || '') + '</p>' +
-        '</div>' +
-        '<span class="badge" style="color:' + badgeColor + '">' + badgeText + '</span>';
-      betsList.appendChild(card);
+
+      betsList.appendChild(wrapper);
     });
 
     const sel = document.getElementById('log-bet-select');
@@ -335,12 +443,84 @@
       logList.innerHTML = '<p class="muted">No entries yet.</p>';
     }
     recent.forEach(entry => {
+      ensureHistory(entry, ['text']);
       const bet = data.bets.find(b => b.id === entry.betId);
-      const row = document.createElement('div');
-      row.className = 'log-entry';
-      row.innerHTML = '<p class="log-date">' + fmtDate(entry.date) + (bet ? ' · ' + escapeHtml(bet.name) : '') + '</p>' +
-        '<p class="log-text">' + escapeHtml(entry.text) + '</p>';
-      logList.appendChild(row);
+      const wrapper = document.createElement('div');
+      wrapper.className = 'log-entry';
+
+      if (editingLogId === entry.id) {
+        const textInput = document.createElement('textarea');
+        textInput.value = entry.text;
+        const btnRow = document.createElement('div');
+        btnRow.className = 'btn-row';
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Save';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        btnRow.appendChild(saveBtn);
+        btnRow.appendChild(cancelBtn);
+        wrapper.appendChild(textInput);
+        wrapper.appendChild(btnRow);
+
+        saveBtn.addEventListener('click', async () => {
+          const newText = textInput.value.trim();
+          if (!newText) return;
+          const changed = newText !== entry.text;
+          entry.text = newText;
+          if (changed) {
+            entry.history.push({ v: entry.history.length + 1, date: new Date().toISOString(), text: newText });
+          }
+          editingLogId = null;
+          render();
+          await save();
+        });
+        cancelBtn.addEventListener('click', () => {
+          editingLogId = null;
+          render();
+        });
+      } else {
+        const dateP = document.createElement('p');
+        dateP.className = 'log-date';
+        dateP.textContent = fmtDate(entry.date) + (bet ? ' · ' + bet.name : '');
+        const textP = document.createElement('p');
+        textP.className = 'log-text';
+        textP.textContent = entry.text;
+        wrapper.appendChild(dateP);
+        wrapper.appendChild(textP);
+
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+        const editLink = document.createElement('a');
+        editLink.href = '#';
+        editLink.className = 'link-btn';
+        editLink.textContent = 'Edit';
+        editLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          editingLogId = entry.id;
+          render();
+        });
+        actions.appendChild(editLink);
+
+        if (entry.history.length > 1) {
+          const historyLink = document.createElement('a');
+          historyLink.href = '#';
+          historyLink.className = 'link-btn';
+          historyLink.textContent = (expandedLogHistory === entry.id ? 'Hide history' : 'History (v' + entry.history.length + ')');
+          historyLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            expandedLogHistory = expandedLogHistory === entry.id ? null : entry.id;
+            render();
+          });
+          actions.appendChild(historyLink);
+        }
+        wrapper.appendChild(actions);
+
+        if (expandedLogHistory === entry.id) {
+          appendHistoryPanel(wrapper, entry.history);
+        }
+      }
+
+      logList.appendChild(wrapper);
     });
   }
 
@@ -356,7 +536,8 @@
     const name = document.getElementById('bet-name').value.trim();
     const why = document.getElementById('bet-why').value.trim();
     if (!name) return;
-    data.bets.push({ id: 'bet_' + Date.now(), name, why, created: new Date().toISOString() });
+    const created = new Date().toISOString();
+    data.bets.push({ id: 'bet_' + Date.now(), name, why, created, history: [{ v: 1, date: created, name, why }] });
     document.getElementById('bet-name').value = '';
     document.getElementById('bet-why').value = '';
     document.getElementById('add-bet-form').style.display = 'none';
@@ -367,7 +548,8 @@
     const text = document.getElementById('log-text').value.trim();
     const betId = document.getElementById('log-bet-select').value || null;
     if (!text) return;
-    data.log.push({ id: 'log_' + Date.now(), text, betId, date: new Date().toISOString() });
+    const date = new Date().toISOString();
+    data.log.push({ id: 'log_' + Date.now(), text, betId, date, history: [{ v: 1, date, text }] });
     document.getElementById('log-text').value = '';
     render();
     await save();
