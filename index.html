@@ -162,6 +162,14 @@
       <div id="log-list"></div>
     </div>
 
+    <div class="section divider">
+      <h2 style="margin-bottom:0.75rem;">Export</h2>
+      <div class="btn-row">
+        <button id="export-activity-btn">Activity log (.csv)</button>
+        <button id="export-versions-btn">Versions table (.csv)</button>
+      </div>
+    </div>
+
     <p class="muted" style="text-align:center;"><a id="change-sync-id" href="#" style="color:inherit;">change sync ID</a></p>
   </div>
 </div>
@@ -610,6 +618,97 @@
     document.getElementById('log-text').value = '';
     render();
     await save();
+  });
+
+  function csvEscape(v) {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function toCsv(rows, headers) {
+    const lines = [headers.join(',')];
+    rows.forEach(r => lines.push(headers.map(h => csvEscape(r[h])).join(',')));
+    return lines.join('\r\n');
+  }
+
+  function downloadCsv(filename, content) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Every version of every bet and log entry, chronological — a full activity trail.
+  function buildActivityRows() {
+    const rows = [];
+    data.bets.forEach(bet => {
+      ensureHistory(bet, ['name', 'why']);
+      bet.history.forEach(h => {
+        rows.push({
+          date: h.date, type: 'bet', action: h.v === 1 ? 'created' : 'edited',
+          item_id: bet.id, version: h.v, bet_name: '', name: h.name, why: h.why || '', text: ''
+        });
+      });
+    });
+    data.log.forEach(entry => {
+      ensureHistory(entry, ['text']);
+      const bet = data.bets.find(b => b.id === entry.betId);
+      entry.history.forEach(h => {
+        rows.push({
+          date: h.date, type: 'log', action: h.v === 1 ? 'created' : 'edited',
+          item_id: entry.id, version: h.v, bet_name: bet ? bet.name : '', name: '', why: '', text: h.text
+        });
+      });
+    });
+    rows.sort((a, b) => new Date(a.date) - new Date(b.date));
+    return rows;
+  }
+
+  // Every bet and log entry grouped with all of its own versions.
+  function buildVersionsRows() {
+    const rows = [];
+    data.bets.forEach(bet => {
+      ensureHistory(bet, ['name', 'why']);
+      const currentV = bet.history.length;
+      bet.history.forEach(h => {
+        rows.push({
+          item_type: 'bet', item_id: bet.id, version: h.v, is_current: h.v === currentV ? 'yes' : 'no',
+          date: h.date, name: h.name, why: h.why || '', text: '', bet_id: '', bet_name: ''
+        });
+      });
+    });
+    data.log.forEach(entry => {
+      ensureHistory(entry, ['text']);
+      const bet = data.bets.find(b => b.id === entry.betId);
+      const currentV = entry.history.length;
+      entry.history.forEach(h => {
+        rows.push({
+          item_type: 'log', item_id: entry.id, version: h.v, is_current: h.v === currentV ? 'yes' : 'no',
+          date: h.date, name: '', why: '', text: h.text, bet_id: entry.betId || '', bet_name: bet ? bet.name : ''
+        });
+      });
+    });
+    rows.sort((a, b) => {
+      if (a.item_type !== b.item_type) return a.item_type.localeCompare(b.item_type);
+      if (a.item_id !== b.item_id) return a.item_id.localeCompare(b.item_id);
+      return a.version - b.version;
+    });
+    return rows;
+  }
+
+  document.getElementById('export-activity-btn').addEventListener('click', () => {
+    const headers = ['date', 'type', 'action', 'item_id', 'version', 'bet_name', 'name', 'why', 'text'];
+    downloadCsv('big-picture-activity.csv', toCsv(buildActivityRows(), headers));
+  });
+
+  document.getElementById('export-versions-btn').addEventListener('click', () => {
+    const headers = ['item_type', 'item_id', 'version', 'is_current', 'date', 'name', 'why', 'text', 'bet_id', 'bet_name'];
+    downloadCsv('big-picture-versions.csv', toCsv(buildVersionsRows(), headers));
   });
 </script>
 </body>
