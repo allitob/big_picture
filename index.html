@@ -94,12 +94,12 @@
   .history-content p { margin: 6px 0 0 !important; }
   .stale-flag { display: inline-block; font-size: 11px; color: var(--warning-text); background: var(--warning-bg); padding: 2px 6px; border-radius: 6px; margin-top: 4px; }
   .bet-name { font-weight: 600; font-size: 15px; margin-bottom: 2px !important; }
-  .bet-why { font-size: 13px; color: var(--text-secondary); }
+  .bet-why { font-size: 13px; color: var(--text-secondary); white-space: pre-wrap; }
   .badge { font-size: 12px; white-space: nowrap; color: var(--text-muted); }
   .muted { color: var(--text-muted); font-size: 14px; }
   .log-entry { border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px; }
   .log-date { font-size: 12px; color: var(--text-muted); margin: 0 0 2px !important; }
-  .log-text { font-size: 14px; }
+  .log-text { font-size: 14px; white-space: pre-wrap; }
   .form-card {
     background: var(--surface);
     border-radius: 12px;
@@ -205,6 +205,9 @@
   let expandedBetHistory = null;
   let editingLogId = null;
   let expandedLogHistory = null;
+  let expandedTexts = new Set();
+  const WHY_LIMIT = 160;
+  const LOG_LIMIT = 240;
 
   const statusEl = document.getElementById('status');
   const appEl = document.getElementById('app');
@@ -273,11 +276,6 @@
   function daysSince(d) {
     return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
   }
-  function escapeHtml(s) {
-    const d = document.createElement('div');
-    d.textContent = s || '';
-    return d.innerHTML;
-  }
 
   // Lazily synthesizes a v1 history entry for items saved before versioning existed.
   function ensureHistory(item, fields) {
@@ -301,6 +299,45 @@
   }
 
   let expandedVersionKey = null;
+
+  // Renders text with a "Show more…" / "Show less" toggle when it exceeds
+  // `limit`. `key` must be unique among everything sharing expandedTexts.
+  function appendExpandableText(container, key, fullText, limit, className) {
+    const p = document.createElement('p');
+    p.className = className;
+    const isLong = fullText.length > limit;
+    const isExpanded = expandedTexts.has(key);
+
+    if (isLong && !isExpanded) {
+      p.textContent = fullText.slice(0, limit).trimEnd() + '… ';
+      const more = document.createElement('a');
+      more.href = '#';
+      more.className = 'link-btn';
+      more.textContent = 'Show more…';
+      more.addEventListener('click', (e) => {
+        e.preventDefault();
+        expandedTexts.add(key);
+        render();
+      });
+      p.appendChild(more);
+    } else {
+      p.textContent = fullText;
+      if (isLong) {
+        p.appendChild(document.createTextNode(' '));
+        const less = document.createElement('a');
+        less.href = '#';
+        less.className = 'link-btn';
+        less.textContent = 'Show less';
+        less.addEventListener('click', (e) => {
+          e.preventDefault();
+          expandedTexts.delete(key);
+          render();
+        });
+        p.appendChild(less);
+      }
+    }
+    container.appendChild(p);
+  }
 
   function appendHistoryPanel(container, history, keyPrefix, renderContent) {
     const panel = document.createElement('div');
@@ -428,11 +465,19 @@
         }
         const row = document.createElement('div');
         row.className = 'card-row';
-        row.innerHTML = '<div style="min-width:0;">' +
-          '<p class="bet-name">' + escapeHtml(bet.name) + '</p>' +
-          '<p class="bet-why">' + escapeHtml(bet.why || '') + '</p>' +
-          '</div>' +
-          '<span class="badge" style="color:' + badgeColor + '">' + badgeText + '</span>';
+        const leftDiv = document.createElement('div');
+        leftDiv.style.minWidth = '0';
+        const nameP = document.createElement('p');
+        nameP.className = 'bet-name';
+        nameP.textContent = bet.name;
+        leftDiv.appendChild(nameP);
+        appendExpandableText(leftDiv, bet.id, bet.why || '', WHY_LIMIT, 'bet-why');
+        row.appendChild(leftDiv);
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'badge';
+        badgeSpan.style.color = badgeColor;
+        badgeSpan.textContent = badgeText;
+        row.appendChild(badgeSpan);
         wrapper.appendChild(row);
 
         const actions = document.createElement('div');
@@ -468,11 +513,8 @@
             nameP.className = 'bet-name';
             nameP.style.fontSize = '13px';
             nameP.textContent = h.name;
-            const whyP = document.createElement('p');
-            whyP.className = 'bet-why';
-            whyP.textContent = h.why || '';
             content.appendChild(nameP);
-            content.appendChild(whyP);
+            appendExpandableText(content, 'histv-bet-' + bet.id + '-v' + h.v, h.why || '', WHY_LIMIT, 'bet-why');
           });
         }
       }
@@ -535,11 +577,8 @@
         const dateP = document.createElement('p');
         dateP.className = 'log-date';
         dateP.textContent = fmtDate(entry.date) + (bet ? ' · ' + bet.name : '');
-        const textP = document.createElement('p');
-        textP.className = 'log-text';
-        textP.textContent = entry.text;
         wrapper.appendChild(dateP);
-        wrapper.appendChild(textP);
+        appendExpandableText(wrapper, entry.id, entry.text, LOG_LIMIT, 'log-text');
 
         if (bet) {
           const versionAtLog = betVersionAtDate(bet, entry.date);
@@ -581,10 +620,7 @@
 
         if (expandedLogHistory === entry.id) {
           appendHistoryPanel(wrapper, entry.history, 'log-' + entry.id, (content, h) => {
-            const p = document.createElement('p');
-            p.className = 'log-text';
-            p.textContent = h.text;
-            content.appendChild(p);
+            appendExpandableText(content, 'histv-log-' + entry.id + '-v' + h.v, h.text, LOG_LIMIT, 'log-text');
           });
         }
       }
