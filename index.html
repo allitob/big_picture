@@ -426,7 +426,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '3.0';
+  const APP_VERSION = '3.1';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -2359,7 +2359,7 @@
   //   data.summaries = { months: {'2026-10': S}, quarters: {'2026-Q3': S}, header: S & {asof:'2026-Q3'} }
   //   S = { text, created, edited?, model? }
   // =====================================================================
-  const SUM_MODEL = 'claude-sonnet-5-5';
+  const SUM_MODEL = 'claude-opus-5-5';
   const monthKey = d => { const x = new Date(d); return x.getFullYear() + '-' + pad2(x.getMonth() + 1); };
   const quarterOfMonth = mk => { const [y, m] = mk.split('-').map(Number); return y + '-Q' + (Math.floor((m - 1) / 3) + 1); };
   const quarterMonths = qk => { const [y, q] = qk.split('-Q').map(Number); return [1, 2, 3].map(i => y + '-' + pad2((q - 1) * 3 + i)); };
