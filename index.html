@@ -273,6 +273,15 @@
   .imp-row .what { color: var(--text-muted); font-size: 12px; }
   .imp-row .change { color: var(--accent); }
   .imp-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--border); }
+  /* v2.6: compact bets, fewer chips */
+  .bet-card { padding: 0; margin-bottom: 6px; }
+  .bet-row { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; border-radius: 12px; padding: 10px 12px; text-align: left; cursor: pointer; }
+  .bet-row .nm { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.35; }
+  .bet-row .age { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .bet-detail { padding: 0 12px 10px; }
+  .bet-detail .card-actions { margin-top: 8px; }
+  .chip.more { border-style: dashed; color: var(--text-muted); }
+  .chip { max-width: 280px; }
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; cursor: zoom-out; }
   .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
 </style>
@@ -385,7 +394,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '2.5';
+  const APP_VERSION = '2.6';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -418,6 +427,9 @@
   let expandedTexts = new Set();
   let showClosed = false;
   let showFuture = false;
+  let expandedBetId = null;
+  const CHIP_LIMIT = 5;
+  let showAllChips = false;
   let reviewRange = 'week';
   let logLimit = 20;
   let filterBet = 'all';
@@ -1009,25 +1021,33 @@
 
       const lt = lastTouch(bet.id);
       const ds = lt ? daysSince(lt) : null;
-      let badgeText = 'Not logged yet';
-      let badgeColor = 'var(--text-muted)';
+      let ageText = 'new', ageTitle = 'Not logged yet', ageColor = 'var(--text-muted)';
       if (ds !== null) {
-        badgeText = ds === 0 ? 'Touched today' : ds === 1 ? 'Touched yesterday' : 'Touched ' + ds + ' days ago';
-        if (ds >= 14) badgeColor = 'var(--danger-text)';
-        else if (ds >= 7) badgeColor = 'var(--warning-text)';
-        else badgeColor = 'var(--text-secondary)';
+        ageText = ds === 0 ? 'today' : ds + 'd';
+        ageTitle = ds === 0 ? 'Touched today' : ds === 1 ? 'Touched yesterday' : 'Touched ' + ds + ' days ago';
+        ageColor = ds >= 14 ? 'var(--danger-text)' : ds >= 7 ? 'var(--warning-text)' : 'var(--text-secondary)';
       }
-      const row = el('div', 'card-row');
-      const leftDiv = el('div');
-      leftDiv.style.minWidth = '0';
-      leftDiv.appendChild(el('p', 'bet-name', bet.name));
-      appendExpandableText(leftDiv, bet.id, bet.why || '', WHY_LIMIT, 'bet-why');
-      row.appendChild(leftDiv);
-      const badge = el('span', 'badge', badgeText);
-      badge.style.color = badgeColor;
-      row.appendChild(badge);
+      const open = expandedBetId === bet.id || closingBetId === bet.id || expandedBetHistory === bet.id;
+      wrapper.className = 'card bet-card';
+      const row = el('button', 'bet-row');
+      row.type = 'button';
+      row.setAttribute('aria-expanded', open ? 'true' : 'false');
+      row.appendChild(el('span', 'nm', bet.name));
+      const age = el('span', 'age', ageText);
+      age.title = ageTitle;
+      age.style.color = ageColor;
+      row.appendChild(age);
+      row.addEventListener('click', () => {
+        expandedBetId = open ? null : bet.id;
+        if (open) { closingBetId = closingBetId === bet.id ? null : closingBetId; expandedBetHistory = expandedBetHistory === bet.id ? null : expandedBetHistory; }
+        render();
+      });
       wrapper.appendChild(row);
+      if (!open) { betsList.appendChild(wrapper); return; }
 
+      const detail = el('div', 'bet-detail');
+      detail.appendChild(el('p', 'small-muted', ageTitle));
+      appendExpandableText(detail, bet.id, bet.why || '', WHY_LIMIT, 'bet-why');
       const n = entriesFor(bet.id).length;
       const actions = el('div', 'card-actions');
       actions.appendChild(linkBtn('Edit', () => { editingBetId = bet.id; render(); }));
@@ -1043,12 +1063,12 @@
         closingStatus = 'done';
         render();
       }));
-      wrapper.appendChild(actions);
-
-      if (expandedBetHistory === bet.id) betHistoryPanel(wrapper, bet);
-      if (closingBetId === bet.id) renderCloseForm(wrapper, bet);
-
+      detail.appendChild(actions);
+      if (expandedBetHistory === bet.id) betHistoryPanel(detail, bet);
+      if (closingBetId === bet.id) renderCloseForm(detail, bet);
+      wrapper.appendChild(detail);
       betsList.appendChild(wrapper);
+
     });
   }
 
@@ -1261,9 +1281,15 @@
   }
 
   // Toggleable bet chips. Shows active bets, plus any closed bet already in `selected`.
+  // Most recently used bets first; only the first few (plus anything selected) are
+  // shown until "+N more" is tapped.
   function renderBetChips(container, selected) {
     container.innerHTML = '';
-    const bets = data.bets.filter(b => isActive(b) || selected.has(b.id));
+    const recency = b => { const lt = lastTouch(b.id); return lt ? new Date(lt).getTime() : 0; };
+    const all = data.bets.filter(b => isActive(b) || selected.has(b.id))
+      .sort((a, b) => recency(b) - recency(a));
+    const bets = showAllChips ? all : all.filter((b, i) => i < CHIP_LIMIT || selected.has(b.id));
+    const hidden = all.length - bets.length;
     bets.forEach(b => {
       const c = el('button', 'chip' + (selected.has(b.id) ? ' on' : ''), b.name);
       c.type = 'button';
@@ -1275,6 +1301,12 @@
       });
       container.appendChild(c);
     });
+    if (hidden > 0 || (showAllChips && all.length > CHIP_LIMIT)) {
+      const more = el('button', 'chip more', hidden > 0 ? '+' + hidden + ' more' : 'Fewer');
+      more.type = 'button';
+      more.addEventListener('click', () => { showAllChips = !showAllChips; renderBetChips(container, selected); });
+      container.appendChild(more);
+    }
     const hint = el('span', 'chip-hint', bets.length ? 'None = general note' : 'General note (no active bets)');
     hint.style.display = selected.size ? 'none' : '';
     container.appendChild(hint);
