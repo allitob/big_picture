@@ -1,6 +1,6 @@
 # Inactivity nudge — setup
 
-Sends you an email if you go 2+ days without a log entry, even when the app isn't open. Runs as a free Google Apps Script on a daily timer — no server, no Firebase upgrade needed.
+Sends you an email if you go 2+ workdays without a log entry (weekends don't count, and it never emails on Sat/Sun), even when the app isn't open. Runs as a free Google Apps Script on a daily timer — no server, no Firebase upgrade needed.
 
 It reads Firestore via a **service account** rather than the app's anonymous-auth flow, so it bypasses the app's Firestore security rules entirely (that's normal — rules only govern client SDK access; a service account's own IAM role governs this). Nothing here needs your sync ID or service account key to be public — both live in Apps Script's private Script Properties, not in this file.
 
@@ -36,10 +36,10 @@ It reads Firestore via a **service account** rather than the app's anonymous-aut
 2. Function: `checkInactivity`. Event source: **Time-driven**. Type: **Day timer**, pick a time window (e.g. 9am–10am).
 3. **Save**.
 
-From now on, if you go 2+ days without logging anything, you'll get one email — not a daily repeat — until you log something new, at which point the cycle resets.
+From now on, if you go 2+ workdays without logging anything, you'll get one email — not a daily repeat — until you log something new, at which point the cycle resets.
 
 ## Notes
 
 - Nothing secret is in `Code.gs` itself — the service account key, project ID, and sync ID all live in Script Properties, which stay private to your Google account and are never pushed anywhere.
 - If you ever change your sync ID, update the `DOC_ID` script property to match.
-- To change the inactivity threshold (currently 2 days) or stop it entirely, edit the script or delete the trigger.
+- To change the inactivity threshold (currently 2 workdays) or stop it entirely, edit the script or delete the trigger.

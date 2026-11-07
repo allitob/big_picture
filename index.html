@@ -403,7 +403,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '2.8';
+  const APP_VERSION = '2.9';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -717,10 +717,14 @@
     const log = liveLog();
     if (!log.length) { nudge.style.display = 'none'; return; }
     const lastEntry = [...log].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-    const ds = daysSince(lastEntry.date);
-    if (ds >= 2) {
+    // Same rule as the email nudge: weekends don't count, and no banner on weekends.
+    const now = new Date();
+    const weekend = d => d.getDay() === 0 || d.getDay() === 6;
+    let ds = 0;
+    for (let d = addDays(new Date(lastEntry.date).setHours(0, 0, 0, 0), 1); d <= now; d = addDays(d, 1)) if (!weekend(d)) ds++;
+    if (ds >= 2 && !weekend(now)) {
       nudge.style.display = 'block';
-      nudge.textContent = ds + ' days since your last log entry. Quick check-in?';
+      nudge.textContent = ds + ' workdays since your last log entry. Quick check-in?';
     } else {
       nudge.style.display = 'none';
     }
