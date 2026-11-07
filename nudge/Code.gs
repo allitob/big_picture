@@ -16,7 +16,21 @@
  *                             the script owner's account)
  */
 
-function checkInactivity(force) {
+// Entry point for the daily trigger. Takes no flag on purpose: a time-driven
+// trigger calls its function with an event object as the first argument, and
+// treating that (truthy) object as "force" made every run send an email.
+function checkInactivity() {
+  runNudge_(false);
+}
+
+// Manual test hook — sends immediately regardless of days-since or debounce,
+// without touching the real debounce state used by the scheduled run.
+function testNudge() {
+  runNudge_(true);
+}
+
+function runNudge_(force) {
+  force = force === true;
   var props = PropertiesService.getScriptProperties();
   var token = getAccessToken_(props);
   var projectId = props.getProperty('PROJECT_ID');
@@ -54,15 +68,9 @@ function checkInactivity(force) {
   GmailApp.sendEmail(
     to,
     'Big Picture: ' + daysSince + ' day' + (daysSince === 1 ? '' : 's') + ' since your last entry',
-    "It's been " + daysSince + " days since you last logged anything.\n\nQuick check-in: " + appUrl
+    "It's been " + daysSince + ' day' + (daysSince === 1 ? '' : 's') + " since you last logged anything.\n\nQuick check-in: " + appUrl
   );
-  props.setProperty('LAST_NUDGED_LOG_DATE', latest.date);
-}
-
-// Manual test hook — sends immediately regardless of days-since or debounce,
-// without touching the real debounce state used by the scheduled run.
-function testNudge() {
-  checkInactivity(true);
+  if (!force) props.setProperty('LAST_NUDGED_LOG_DATE', latest.date);
 }
 
 function getAccessToken_(props) {
