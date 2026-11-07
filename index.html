@@ -259,9 +259,8 @@
     .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 40px; align-items: start; }
     .col-side { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 4px; }
     .col-side .fold:first-child { border-top: none; }
-    .fold.collapsed .fold-body { display: block; }
-    .fold-head { cursor: default; padding-top: 0; }
-    .fold-chev { display: none; }
+    .fold-head { padding-top: 0; }
+    .col-side .fold + .fold .fold-head { padding-top: 14px; }
   }
   /* v2.5: future bets, importer */
   .pill.idea { color: var(--accent); background: var(--accent-soft); }
@@ -282,6 +281,16 @@
   .bet-detail .card-actions { margin-top: 8px; }
   .chip.more { border-style: dashed; color: var(--text-muted); }
   .chip { max-width: 280px; }
+  /* v2.7: review "Other" tooltip, composer hint, Haiku tagging */
+  .bar-row.other { position: relative; cursor: default; }
+  .bar-row.other .bar-label { color: var(--text-secondary); }
+  .tip { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--text); color: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; box-shadow: 0 6px 18px rgba(0,0,0,0.2); }
+  .bar-row.other:hover .tip, .bar-row.other:focus-within .tip, .bar-row.other.open .tip { display: block; }
+  .compose-hint { font-size: 12px; color: var(--text-muted); margin: -2px 0 8px; min-height: 16px; }
+  .compose-hint kbd { font-family: inherit; font-size: 11px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--surface); color: var(--text-secondary); }
+  .compose-hint .ai-note { color: var(--ai); }
+  .ai-suggest { color: var(--ai); }
+  .compose-hint .err { color: var(--danger-text); }
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; cursor: zoom-out; }
   .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
 </style>
@@ -394,7 +403,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '2.6';
+  const APP_VERSION = '2.7';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -730,9 +739,11 @@
       sec.classList.toggle('collapsed', collapsed);
       head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     };
-    apply(foldState(id) !== 'open');                // collapsed unless opened before
+    // Remembered per device. Defaults: Bets folded everywhere; Review open on wide screens.
+    const saved = foldState(id);
+    const wide = window.matchMedia('(min-width: 900px)').matches;
+    apply(saved ? saved !== 'open' : !(id === 'review' && wide));
     head.addEventListener('click', () => {
-      if (window.matchMedia('(min-width: 900px)').matches) return;
       const collapsed = !sec.classList.contains('collapsed');
       apply(collapsed);
       try { localStorage.setItem(FOLD_KEY(id), collapsed ? 'closed' : 'open'); } catch (e) {}
@@ -991,6 +1002,16 @@
       ['Export activity log (.csv)', () => document.getElementById('export-activity-btn').click()],
       ['Export versions table (.csv)', () => document.getElementById('export-versions-btn').click()],
       ['Import plan…', () => importInput.click()],
+      ['Haiku key…', () => {
+        const cur = aiKey();
+        const v = prompt(cur ? 'Haiku tagging is on for this device. Paste a new Anthropic API key, or clear the field to turn it off.' :
+          'Paste an Anthropic API key to let Haiku suggest bets (stored only in this browser).', cur ? '••••' + cur.slice(-4) : '');
+        if (v === null || v.startsWith('••••')) return;
+        try { if (v.trim()) localStorage.setItem(AI_KEY, v.trim()); else localStorage.removeItem(AI_KEY); } catch (e) {}
+        hintMsg = null;
+        renderComposeHint();
+        refreshSuggestBtn();
+      }],
       ['Change sync ID…', () => document.getElementById('change-sync-id').click()],
     ]);
     const b = k.querySelector('.kebab');
@@ -1371,18 +1392,36 @@
       const bet = data.bets.find(b => b.id === id);
       return { id, n, name: bet ? bet.name : 'General notes', general: !bet };
     }).sort((a, b) => (a.general - b.general) || (b.n - a.n));
-    const max = Math.max(1, ...rows.map(x => x.n));
+    // More than 6 rows: top 5 bets, then one "Other" row (hover/tap lists the rest), then General notes.
+    const betRows = rows.filter(x => !x.general), genRows = rows.filter(x => x.general);
+    let shownRows = rows, otherRows = [];
+    if (rows.length > 6) {
+      otherRows = betRows.slice(5);
+      shownRows = betRows.slice(0, 5);
+      shownRows.push({ other: true, n: otherRows.reduce((t, x) => t + x.n, 0), name: 'Other · ' + plural(otherRows.length, 'bet', 'bets') });
+      shownRows = shownRows.concat(genRows);
+    }
+    const max = Math.max(1, ...shownRows.filter(x => !x.other).map(x => x.n));
     if (rows.length) {
       card.appendChild(el('p', 'outcome-label', 'Where attention went'));
       card.lastChild.style.margin = '0 0 6px';
-      rows.forEach(x => {
-        const row = el('div', 'bar-row');
+      shownRows.forEach(x => {
+        const row = el('div', 'bar-row' + (x.other ? ' other' : ''));
         const left = el('div');
         left.appendChild(el('div', 'bar-label', x.name));
         const track = el('div', 'bar-track');
         const fill = el('div', 'bar-fill');
-        fill.style.width = (100 * x.n / max) + '%';
+        fill.style.width = (100 * Math.min(x.n, max) / max) + '%';
         if (x.general) fill.style.background = 'var(--text-muted)';
+        if (x.other) {
+          fill.style.background = 'var(--border)';
+          row.tabIndex = 0;
+          row.setAttribute('aria-label', 'Other bets: ' + otherRows.map(o => o.name + ' ' + o.n).join(', '));
+          const tip = el('div', 'tip');
+          otherRows.forEach(o => tip.appendChild(el('div', '', o.name + ' · ' + o.n)));
+          row.appendChild(tip);
+          row.addEventListener('click', (e) => { e.stopPropagation(); row.classList.toggle('open'); });
+        }
         track.appendChild(fill);
         left.appendChild(track);
         row.appendChild(left);
@@ -2187,6 +2226,105 @@
   addEntryBtn.id = 'save-log-btn';
   logComposer.bar.prepend(addEntryBtn);
   document.getElementById('log-composer').appendChild(logComposer.root);
+  const composeHint = el('div', 'compose-hint');
+  logComposer.root.insertBefore(composeHint, logComposer.ta.nextSibling);
+
+  // ----- Haiku bet suggestions -----
+  // Optional. The Anthropic API key is pasted per device (⚙ → Haiku key) and kept
+  // only in this browser's localStorage — never in the repo or the synced doc.
+  const AI_KEY = 'bp-anthropic-key';
+  const AI_MODEL = 'claude-haiku-5-5';
+  const desktopKeys = window.matchMedia('(pointer: fine)').matches;
+  function aiKey() { try { return localStorage.getItem(AI_KEY) || ''; } catch (e) { return ''; } }
+  let hintMsg = null;                       // {html} override while/after a suggestion
+  function renderComposeHint() {
+    composeHint.innerHTML = '';
+    if (hintMsg) { composeHint.appendChild(hintMsg); return; }
+    if (!desktopKeys) return;
+    const k = (t) => el('kbd', '', t);
+    composeHint.append(k('Enter'), ' add entry · ', k('Shift'), '+', k('Enter'), aiKey() ? ' Haiku suggests bets · ' : ' suggest bets (set a Haiku key in ⚙) · ', k('Ctrl'), '+', k('Enter'), ' new line');
+  }
+  const suggestBtn = el('button', 'small ai-suggest', '✦ Suggest bets');
+  suggestBtn.type = 'button';
+  suggestBtn.title = 'Ask Haiku which bets this note belongs to';
+  suggestBtn.addEventListener('click', () => suggestBets());
+  logComposer.bar.insertBefore(suggestBtn, logComposer.bar.children[1] || null);
+  function refreshSuggestBtn() { suggestBtn.style.display = aiKey() && !desktopKeys ? '' : 'none'; }
+
+  function betBriefs() {
+    return data.bets.filter(isActive).map(b => {
+      const recent = entriesFor(b.id).sort((x, y) => new Date(y.date) - new Date(x.date)).slice(0, 3)
+        .map(e => '    - ' + (e.text || '').replace(/\s+/g, ' ').slice(0, 220));
+      return '- id: ' + b.id + '\n  name: ' + b.name + '\n  why: ' + (b.why || '').replace(/\s+/g, ' ') +
+        (recent.length ? '\n  recent notes:\n' + recent.join('\n') : '');
+    }).join('\n');
+  }
+
+  let suggesting = false;
+  async function suggestBets() {
+    const text = logComposer.ta.value.trim();
+    const key = aiKey();
+    const say = (cls, t) => { hintMsg = el('span', cls, t); renderComposeHint(); };
+    if (!key) { say('err', 'No Haiku key on this device — add one in ⚙ → Haiku key.'); return; }
+    if (!text) { say('err', 'Write the note first, then ask for bets.'); return; }
+    if (suggesting) return;
+    const active = data.bets.filter(isActive);
+    if (!active.length) { say('err', 'No active bets to choose from.'); return; }
+    suggesting = true;
+    say('ai-note', '✦ Asking Haiku…');
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: AI_MODEL,
+          max_tokens: 1024,
+          system: 'You tag work-log notes written by a manufacturing engineer with the "bets" (multi-week initiatives) they belong to.\n' +
+            'Pick only bets the note is clearly about — usually 0 to 2, at most 3. A passing mention is not enough. ' +
+            'If nothing fits, return an empty list (it becomes a general note).\n' +
+            'Reply with JSON only, no prose: {"bet_ids": ["<id>", ...]}\n\nActive bets:\n' + betBriefs(),
+          messages: [{ role: 'user', content: 'Note:\n' + text }],
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((body.error && body.error.message) || ('HTTP ' + res.status));
+      const out = (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+      const m = out.match(/\{[\s\S]*\}/);
+      const ids = ((m && JSON.parse(m[0]).bet_ids) || []).filter(id => active.some(b => b.id === id));
+      ids.forEach(id => composeBets.add(id));
+      renderLogSelect();
+      say('ai-note', ids.length
+        ? '✦ Haiku: ' + ids.map(id => active.find(b => b.id === id).name).join(' + ') + (desktopKeys ? ' — adjust, then Enter to add' : '')
+        : '✦ Haiku: no bet fits — general note' + (desktopKeys ? ' (Enter to add)' : ''));
+    } catch (e) {
+      console.error('suggest failed', e);
+      say('err', 'Haiku failed: ' + e.message);
+    } finally {
+      suggesting = false;
+    }
+  }
+
+  logComposer.ta.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing || !desktopKeys) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) {                  // new line
+      e.preventDefault();
+      const t = logComposer.ta, a = t.selectionStart, b = t.selectionEnd;
+      t.value = t.value.slice(0, a) + '\n' + t.value.slice(b);
+      t.selectionStart = t.selectionEnd = a + 1;
+      autosize(t);
+      return;
+    }
+    e.preventDefault();
+    if (e.shiftKey) suggestBets(); else addEntryBtn.click();
+  });
+  logComposer.ta.addEventListener('input', () => { if (hintMsg && hintMsg.classList.contains('err')) { hintMsg = null; renderComposeHint(); } });
+  renderComposeHint();
+  refreshSuggestBtn();
 
   addEntryBtn.addEventListener('click', async () => {
     const text = logComposer.ta.value.trim();
@@ -2203,6 +2341,9 @@
       if (attachments.length) entry.attachments = attachments;
       data.log.push(entry);
       logComposer.reset();
+      composeBets.clear();
+      hintMsg = null;
+      renderComposeHint();
       render();
       await save();
     } catch (e) {
