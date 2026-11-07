@@ -263,6 +263,16 @@
     .fold-head { cursor: default; padding-top: 0; }
     .fold-chev { display: none; }
   }
+  /* v2.5: future bets, importer */
+  .pill.idea { color: var(--accent); background: var(--accent-soft); }
+  .future-card { background: transparent; border: 1px dashed var(--border); }
+  .imp-sec { margin: 4px 0 16px; }
+  .imp-sec-head { display: flex; justify-content: space-between; align-items: baseline; margin: 10px 0 6px; }
+  .imp-row { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; cursor: pointer; }
+  .imp-row input { width: auto; margin: 2px 0 0; flex: none; }
+  .imp-row .what { color: var(--text-muted); font-size: 12px; }
+  .imp-row .change { color: var(--accent); }
+  .imp-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--border); }
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; cursor: zoom-out; }
   .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
 </style>
@@ -327,6 +337,7 @@
               </div>
             </div>
             <div id="bets-list"></div>
+            <div id="future-bets"></div>
             <div id="closed-bets"></div>
           </div>
         </section>
@@ -374,7 +385,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '2.4';
+  const APP_VERSION = '2.5';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -406,6 +417,7 @@
   let expandedVersionKey = null;
   let expandedTexts = new Set();
   let showClosed = false;
+  let showFuture = false;
   let reviewRange = 'week';
   let logLimit = 20;
   let filterBet = 'all';
@@ -541,6 +553,9 @@
   }
   function betStatus(bet) { return bet.status || 'active'; }
   function isActive(bet) { return betStatus(bet) === 'active'; }
+  function isClosed(bet) { const s = betStatus(bet); return s === 'done' || s === 'dropped'; }
+  const STATUS_LABEL = { done: 'Done', dropped: 'Dropped', idea: 'Future', active: 'Active' };
+  function statusPill(bet) { return el('span', 'pill ' + betStatus(bet), STATUS_LABEL[betStatus(bet)] || betStatus(bet)); }
   function liveLog() { return data.log.filter(l => !l.deleted); }
   function entryBetIds(e) { return e.betIds || (e.betId ? [e.betId] : []); }
   function entryBets(e) { return entryBetIds(e).map(id => data.bets.find(b => b.id === id)).filter(Boolean); }
@@ -668,6 +683,7 @@
     renderNudge();
     renderFoldSummaries();
     renderBets();
+    renderFutureBets();
     renderClosedBets();
     renderLogSelect();
     renderReview();
@@ -740,10 +756,229 @@
       'This week · ' + plural(wk.length, 'note', 'notes') + ' · ' + countWorkdays(days, r.from) + '/5 days';
   }
 
+  // ---------- plan import ----------
+  // A plan file (format "big-picture-plan/1") creates or updates bets and re-assigns
+  // notes to bets. Nothing is applied until reviewed: every change has a checkbox.
+  // Applying first downloads a full backup and offers Undo.
+  //   { format, title, bets: [{ key, existing?, name, why, status, closed?, outcome? }],
+  //     assign: [{ id: <log entry id>, bets: [<bet key or existing bet id>] }] }
+  const importInput = el('input');
+  importInput.type = 'file';
+  importInput.accept = '.json,application/json';
+  importInput.hidden = true;
+  document.body.appendChild(importInput);
+  importInput.addEventListener('change', async () => {
+    const f = importInput.files[0];
+    importInput.value = '';
+    if (!f) return;
+    let plan;
+    try { plan = JSON.parse(await f.text()); } catch (e) { alert('That file isn\'t valid JSON.'); return; }
+    if (!plan || !String(plan.format || '').startsWith('big-picture-plan/') || !Array.isArray(plan.bets)) {
+      alert('That file isn\'t a Big Picture plan.');
+      return;
+    }
+    openImportSheet(plan);
+  });
+
+  function planDate(d) {
+    if (!d) return null;
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + 'T12:00:00').toISOString() : new Date(d).toISOString();
+  }
+
+  function buildImport(plan) {
+    const byName = new Map(data.bets.map(b => [b.name.trim().toLowerCase(), b]));
+    const keyToId = new Map();
+    const betOps = plan.bets.map((pb, i) => {
+      let target = data.bets.find(b => b.id === pb.key) || byName.get(String(pb.name || '').trim().toLowerCase());
+      const status = ['active', 'idea', 'done', 'dropped'].includes(pb.status) ? pb.status : 'active';
+      if (target) {
+        keyToId.set(pb.key, target.id);
+        const changes = [];
+        if (pb.name && pb.name !== target.name) changes.push('renamed from "' + target.name + '"');
+        if (pb.why !== undefined && pb.why !== (target.why || '')) changes.push('why rewritten');
+        if (status !== betStatus(target)) changes.push(STATUS_LABEL[betStatus(target)] + ' → ' + STATUS_LABEL[status]);
+        return { kind: 'update', pb, status, target, changes, on: changes.length > 0 };
+      }
+      const id = 'bet_' + (Date.now() + i);
+      keyToId.set(pb.key, id);
+      return { kind: 'create', pb, status, id, on: true };
+    });
+    const noteOps = [];
+    let missing = 0;
+    (plan.assign || []).forEach(a => {
+      const entry = data.log.find(e => e.id === a.id && !e.deleted);
+      if (!entry) { missing++; return; }
+      const ids = (a.bets || []).map(k => keyToId.get(k) || (data.bets.some(b => b.id === k) ? k : null)).filter(Boolean);
+      const cur = entryBetIds(entry);
+      if (ids.length === cur.length && ids.every(x => cur.includes(x))) return;
+      noteOps.push({ entry, ids, on: true });
+    });
+    return { betOps, noteOps, missing, keyToId };
+  }
+
+  function openImportSheet(plan) {
+    const imp = buildImport(plan);
+    const nameFor = id => {
+      const op = imp.betOps.find(o => (o.kind === 'create' ? o.id : o.target.id) === id);
+      if (op) return op.pb.name || op.target.name;
+      const b = data.bets.find(x => x.id === id);
+      return b ? b.name : '?';
+    };
+    const back = el('div', 'sheet-back');
+    back.id = 'import-sheet';
+    const sheet = el('div', 'sheet');
+    const head = el('div', 'sheet-head');
+    const title = el('div', 'sheet-title');
+    title.appendChild(el('strong', '', 'Import: ' + (plan.title || 'plan')));
+    const sum = el('span', '');
+    title.appendChild(sum);
+    const closeBtn = el('button', 'icon-btn', '×');
+    closeBtn.addEventListener('click', () => back.remove());
+    head.appendChild(title);
+    head.appendChild(closeBtn);
+    const body = el('div', 'sheet-body');
+    const foot = el('div', 'imp-foot');
+    const cancel = el('button', '', 'Cancel');
+    cancel.addEventListener('click', () => back.remove());
+    const apply = el('button', '', 'Apply');
+    apply.style.background = 'var(--accent)';
+    apply.style.color = 'var(--bg)';
+    apply.style.borderColor = 'var(--accent)';
+    foot.appendChild(cancel);
+    foot.appendChild(apply);
+
+    const refresh = () => {
+      const nb = imp.betOps.filter(o => o.on).length, nn = imp.noteOps.filter(o => o.on).length;
+      sum.textContent = plural(nb, 'bet change', 'bet changes') + ' · ' + plural(nn, 'note re-tagged', 'notes re-tagged') + (imp.missing ? ' · ' + imp.missing + ' not found' : '');
+      apply.textContent = 'Apply ' + (nb + nn);
+      apply.disabled = nb + nn === 0;
+    };
+    const section = (label, ops, rowFor) => {
+      const sec = el('div', 'imp-sec');
+      const h = el('div', 'imp-sec-head');
+      h.appendChild(el('span', 'outcome-label', label + ' (' + ops.length + ')'));
+      const all = linkBtn('None', () => {
+        const turnOn = ops.every(o => !o.on);
+        ops.forEach(o => { o.on = turnOn; });
+        sec.querySelectorAll('input[type=checkbox]').forEach((c, i) => { c.checked = ops[i].on; });
+        all.textContent = turnOn ? 'None' : 'All';
+        refresh();
+      });
+      h.appendChild(all);
+      sec.appendChild(h);
+      ops.forEach(o => {
+        const row = el('label', 'imp-row');
+        const cb = el('input');
+        cb.type = 'checkbox';
+        cb.checked = o.on;
+        cb.addEventListener('change', () => { o.on = cb.checked; refresh(); });
+        row.appendChild(cb);
+        const txt = el('div');
+        rowFor(o, txt);
+        row.appendChild(txt);
+        sec.appendChild(row);
+      });
+      body.appendChild(sec);
+    };
+    section('Bets', imp.betOps, (o, t) => {
+      const st = STATUS_LABEL[o.status];
+      if (o.kind === 'create') {
+        t.appendChild(el('div', '', o.pb.name));
+        t.appendChild(el('div', 'what', 'New · ' + st + (o.pb.closed ? ' · closed ' + fmtDate(planDate(o.pb.closed)) : '')));
+      } else {
+        t.appendChild(el('div', '', o.pb.name || o.target.name));
+        t.appendChild(el('div', 'what', o.changes.length ? 'Update · ' + o.changes.join(' · ') : 'Already up to date'));
+      }
+    });
+    section('Notes', imp.noteOps, (o, t) => {
+      t.appendChild(el('div', '', fmtDay(o.entry.date) + ' — ' + (o.entry.text || '(pictures)').replace(/\s+/g, ' ').slice(0, 70) + '…'));
+      const from = entryBets(o.entry).map(b => b.name).join(' + ') || 'General';
+      const to = o.ids.map(nameFor).join(' + ') || 'General';
+      const w = el('div', 'what', from + ' → ');
+      w.appendChild(el('span', 'change', to));
+      t.appendChild(w);
+    });
+    refresh();
+
+    apply.addEventListener('click', async () => {
+      const snapshot = JSON.stringify(data);
+      downloadFile('big-picture-backup-' + dayKey(new Date()) + '.json', snapshot, 'application/json');
+      const stats = applyImport(imp);
+      back.remove();
+      render();
+      await save();
+      showToast('Imported: ' + [stats.created && plural(stats.created, 'new bet', 'new bets'), stats.updated && stats.updated + ' updated', stats.notes && plural(stats.notes, 'note re-tagged', 'notes re-tagged')].filter(Boolean).join(', '),
+        'Undo', async () => { data = JSON.parse(snapshot); render(); await save(); showToast('Import undone'); });
+    });
+
+    sheet.appendChild(head);
+    sheet.appendChild(body);
+    sheet.appendChild(foot);
+    back.appendChild(sheet);
+    back.addEventListener('click', (e) => { if (e.target === back) back.remove(); });
+    document.body.appendChild(back);
+  }
+
+  function applyImport(imp) {
+    const now = new Date().toISOString();
+    const stats = { created: 0, updated: 0, notes: 0 };
+    const enabledBetIds = new Set();
+    imp.betOps.forEach(o => {
+      if (o.kind === 'update' && !o.on) enabledBetIds.add(o.target.id);   // existing bet, just untouched
+      if (!o.on) return;
+      const pb = o.pb;
+      if (o.kind === 'create') {
+        // Start date = first note assigned to this bet, so "ran N wk" is meaningful.
+        const noteDates = imp.noteOps.filter(n => n.on && n.ids.includes(o.id)).map(n => n.entry.date).sort();
+        const closed = planDate(pb.closed);
+        const created = noteDates[0] || closed || now;
+        const bet = { id: o.id, name: pb.name, why: pb.why || '', created, status: o.status,
+          history: [{ v: 1, date: created, name: pb.name, why: pb.why || '' }], statusLog: [] };
+        if (o.status === 'idea') bet.statusLog.push({ date: created, status: 'idea', outcome: '' });
+        if (o.status === 'done' || o.status === 'dropped') {
+          bet.closed = closed || now;
+          bet.outcome = pb.outcome || '';
+          bet.statusLog.push({ date: bet.closed, status: o.status, outcome: bet.outcome });
+        }
+        data.bets.push(bet);
+        enabledBetIds.add(o.id);
+        stats.created++;
+      } else {
+        const b = o.target;
+        ensureHistory(b, ['name', 'why']);
+        const newName = pb.name || b.name, newWhy = pb.why !== undefined ? pb.why : (b.why || '');
+        if (newName !== b.name || newWhy !== (b.why || '')) {
+          b.name = newName;
+          b.why = newWhy;
+          b.history.push({ v: b.history.length + 1, date: now, name: newName, why: newWhy, reframe: true });
+        }
+        if (o.status !== betStatus(b)) {
+          b.status = o.status;
+          b.statusLog = b.statusLog || [];
+          if (o.status === 'done' || o.status === 'dropped') {
+            b.closed = planDate(pb.closed) || now;
+            b.outcome = pb.outcome || '';
+          } else { delete b.closed; }
+          b.statusLog.push({ date: b.closed || now, status: o.status, outcome: b.outcome || '' });
+        }
+        enabledBetIds.add(b.id);
+        stats.updated++;
+      }
+    });
+    data.bets.forEach(b => { if (!imp.betOps.some(o => (o.kind === 'create' ? o.id : o.target.id) === b.id)) enabledBetIds.add(b.id); });
+    imp.noteOps.forEach(n => {
+      if (!n.on) return;
+      setEntryBets(n.entry, n.ids.filter(id => enabledBetIds.has(id)));
+      stats.notes++;
+    });
+    return stats;
+  }
+
   document.getElementById('settings-slot').appendChild((() => {
     const k = kebabMenu([
       ['Export activity log (.csv)', () => document.getElementById('export-activity-btn').click()],
       ['Export versions table (.csv)', () => document.getElementById('export-versions-btn').click()],
+      ['Import plan…', () => importInput.click()],
       ['Change sync ID…', () => document.getElementById('change-sync-id').click()],
     ]);
     const b = k.querySelector('.kebab');
@@ -888,10 +1123,53 @@
     setTimeout(() => outcome.focus(), 0);
   }
 
+  function renderFutureBets() {
+    const box = document.getElementById('future-bets');
+    box.innerHTML = '';
+    const future = data.bets.filter(b => betStatus(b) === 'idea');
+    if (!future.length) return;
+    const head = el('div', 'toggle-head');
+    head.style.margin = '14px 0 8px';
+    head.appendChild(el('span', 'muted', 'Future bets (' + future.length + ')'));
+    head.appendChild(el('span', 'link-btn', showFuture ? 'Hide' : 'Show'));
+    head.addEventListener('click', () => { showFuture = !showFuture; render(); });
+    box.appendChild(head);
+    if (!showFuture) return;
+    future.forEach(bet => {
+      ensureHistory(bet, ['name', 'why']);
+      const wrapper = el('div', 'card future-card');
+      if (editingBetId === bet.id) { renderBetEditor(wrapper, bet); box.appendChild(wrapper); return; }
+      const nameP = el('p', 'bet-name', bet.name);
+      nameP.appendChild(statusPill(bet));
+      wrapper.appendChild(nameP);
+      appendExpandableText(wrapper, 'future-why-' + bet.id, bet.why || '', WHY_LIMIT, 'bet-why');
+      const n = entriesFor(bet.id).length;
+      const actions = el('div', 'card-actions');
+      actions.appendChild(linkBtn('Start bet', async () => {
+        const now = new Date().toISOString();
+        bet.status = 'active';
+        bet.statusLog = bet.statusLog || [];
+        bet.statusLog.push({ date: now, status: 'active', from: 'idea', outcome: '' });
+        render();
+        await save();
+      }));
+      actions.appendChild(linkBtn('Edit', () => { editingBetId = bet.id; render(); }));
+      if (n) actions.appendChild(linkBtn('Log (' + n + ')', () => { filterBet = bet.id; logLimit = LOG_PAGE; render(); scrollToLog(); }));
+      actions.appendChild(linkBtn(closingBetId === bet.id ? 'Cancel' : 'Drop', () => {
+        closingBetId = closingBetId === bet.id ? null : bet.id;
+        closingStatus = 'dropped';
+        render();
+      }));
+      wrapper.appendChild(actions);
+      if (closingBetId === bet.id) renderCloseForm(wrapper, bet);
+      box.appendChild(wrapper);
+    });
+  }
+
   function renderClosedBets() {
     const box = document.getElementById('closed-bets');
     box.innerHTML = '';
-    const closed = data.bets.filter(b => !isActive(b))
+    const closed = data.bets.filter(isClosed)
       .sort((a, b) => new Date(b.closed || 0) - new Date(a.closed || 0));
     if (!closed.length) return;
 
@@ -908,7 +1186,7 @@
       const st = betStatus(bet);
       const wrapper = el('div', 'card closed-card');
       const nameP = el('p', 'bet-name', bet.name);
-      nameP.appendChild(el('span', 'pill ' + st, st === 'done' ? 'Done' : 'Dropped'));
+      nameP.appendChild(statusPill(bet));
       wrapper.appendChild(nameP);
 
       const n = entriesFor(bet.id).length;
@@ -954,7 +1232,8 @@
       select.appendChild(o);
     });
     const active = data.bets.filter(isActive);
-    const closed = data.bets.filter(b => !isActive(b));
+    const closed = data.bets.filter(isClosed);
+    const future = data.bets.filter(b => betStatus(b) === 'idea');
     const addGroup = (label, bets) => {
       if (!bets.length) return;
       const g = document.createElement('optgroup');
@@ -968,6 +1247,7 @@
     };
     if (includeClosed) {
       addGroup('Active', active);
+      addGroup('Future', future);
       addGroup('Closed', closed);
     } else {
       active.forEach(b => {
@@ -1045,7 +1325,7 @@
     } else {
       stat(days.size, days.size === 1 ? 'day logged' : 'days logged');
     }
-    const closedInRange = data.bets.filter(b => !isActive(b) && b.closed && inRange(b.closed, r));
+    const closedInRange = data.bets.filter(b => isClosed(b) && b.closed && inRange(b.closed, r));
     stat(closedInRange.length, closedInRange.length === 1 ? 'bet closed' : 'bets closed');
     card.appendChild(stats);
 
@@ -1095,7 +1375,7 @@
       closedInRange.forEach(b => {
         const p = el('p', 'bet-why', '');
         p.appendChild(el('strong', '', b.name));
-        p.appendChild(el('span', 'pill ' + betStatus(b), betStatus(b) === 'done' ? 'Done' : 'Dropped'));
+        p.appendChild(statusPill(b));
         if (b.outcome) p.appendChild(document.createTextNode(' — ' + b.outcome));
         card.appendChild(p);
       });
@@ -1128,7 +1408,7 @@
         '; ' + n + (n === 1 ? ' entry' : ' entries') + ' in period' + (lt ? '; last touched ' + fmtDate(lt) : '; never logged'));
       if (b.why) L.push('  Why: ' + b.why.replace(/\n+/g, ' '));
     });
-    const closed = data.bets.filter(b => !isActive(b) && b.closed && inRange(b.closed, r));
+    const closed = data.bets.filter(b => isClosed(b) && b.closed && inRange(b.closed, r));
     if (closed.length) {
       L.push('');
       L.push('## Closed in this period');
@@ -1558,7 +1838,7 @@
     const dateP = el('p', 'log-date', opts.showTime ? fmtTime(entry.date) : fmtDay(entry.date));
     bets.forEach((b, i) => {
       dateP.appendChild(document.createTextNode((i === 0 ? ' · ' : ' + ') + b.name));
-      if (!isActive(b)) dateP.appendChild(el('span', 'pill ' + betStatus(b), betStatus(b) === 'done' ? 'Done' : 'Dropped'));
+      if (!isActive(b)) dateP.appendChild(statusPill(b));
     });
     if (entry.ai) dateP.appendChild(aiBadge());
     wrapper.appendChild(dateP);
@@ -1573,7 +1853,8 @@
       ensureHistory(bet, ['name', 'why']);
       const versionAtLog = betVersionAtDate(bet, entry.date);
       const currentVersion = bet.history.length;
-      if (versionAtLog !== currentVersion) {
+      // Versions marked `reframe` (wording updates, e.g. from an import) don't count as the bet changing.
+      if (versionAtLog !== currentVersion && bet.history.slice(versionAtLog).some(h => !h.reframe)) {
         const who = bets.length > 1 ? '"' + bet.name + '"' : 'Bet';
         wrapper.appendChild(el('span', 'stale-flag', who + ' has changed since this entry (was v' + versionAtLog + ', now v' + currentVersion + ')'));
         wrapper.appendChild(document.createTextNode(' '));
@@ -1958,7 +2239,7 @@
       });
       (bet.statusLog || []).forEach(s => {
         rows.push({
-          date: s.date, type: 'bet', action: s.status === 'active' ? 'reopened' : 'closed',
+          date: s.date, type: 'bet', action: s.status === 'idea' ? 'planned' : s.status === 'active' ? (s.from === 'idea' ? 'started' : 'reopened') : 'closed',
           item_id: bet.id, version: '', bet_name: '', name: bet.name, why: '', text: '', status: s.status, outcome: s.outcome || ''
         });
       });
