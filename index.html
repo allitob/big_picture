@@ -173,6 +173,7 @@
   .chip { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); }
   .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
   .chip-hint { font-size: 12px; color: var(--text-muted); align-self: center; }
+  .composer.ai textarea { border-color: var(--ai); box-shadow: inset 3px 0 0 var(--ai); }
   .composer.dragging textarea { border-color: var(--accent); border-style: dashed; }
   .att-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
   .att { position: relative; width: 60px; height: 60px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--bg); cursor: pointer; padding: 0; flex: none; }
@@ -219,6 +220,25 @@
   .sheet-body .log-entry:last-child { border-bottom: none; }
   .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: 14px; display: flex; gap: 14px; align-items: center; z-index: 60; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
   .toast a { color: var(--accent-soft); font-weight: 600; cursor: pointer; }
+  /* v2.3: quarters, kebab menu, AI summaries */
+  :root { --ai: #7a4fd6; --ai-bg: #f1ecfb; }
+  @media (prefers-color-scheme: dark) { :root { --ai: #b9a0f5; --ai-bg: #2a2340; } }
+  .heat-quarters { position: relative; height: 18px; margin-top: 6px; font-size: 10px; color: var(--text-muted); }
+  .heat-quarters span { position: absolute; top: 0; border-top: 1px solid var(--border); padding-top: 2px; white-space: nowrap; overflow: hidden; }
+  .heat-days { grid-template-rows: 14px repeat(7, 13px) 24px; }
+  .card-actions { align-items: center; }
+  .kebab-wrap { position: relative; margin-left: auto; }
+  .kebab { background: none; border: none; padding: 0 6px; font-size: 18px; line-height: 1; color: var(--text-muted); cursor: pointer; border-radius: 6px; }
+  .kebab:hover, .kebab[aria-expanded="true"] { background: var(--surface); color: var(--text); }
+  .menu { position: absolute; right: 0; top: calc(100% + 4px); min-width: 140px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.15); padding: 4px; z-index: 30; }
+  .menu button { display: block; width: 100%; white-space: nowrap; text-align: left; border: none; background: none; padding: 8px 10px; font-size: 14px; border-radius: 6px; }
+  .menu button:hover { background: var(--surface); }
+  .menu button.danger { color: var(--danger-text); }
+  .log-entry.ai { border-left: 3px solid var(--ai); background: var(--ai-bg); border-radius: 0 8px 8px 0; padding: 8px 10px; border-bottom-color: transparent; }
+  .ai-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--ai); margin-left: 6px; vertical-align: 1px; }
+  .ai-badge svg, .ai-toggle svg { width: 12px; height: 12px; fill: currentColor; }
+  .ai-toggle { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); }
+  .ai-toggle[aria-pressed="true"] { background: var(--ai-bg); border-color: var(--ai); color: var(--ai); font-weight: 600; }
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; cursor: zoom-out; }
   .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
 </style>
@@ -320,7 +340,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '2.2';
+  const APP_VERSION = '2.3';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -331,6 +351,7 @@
   //   bet:   { id, name, why, created, history[{v,date,name,why}],
   //            status: 'active'|'done'|'dropped', closed, outcome,
   //            statusLog[{date, status, outcome}] }
+  //   entry.ai: true when the note is an AI summary (badge + violet styling)
   //   entry: { id, text, betIds[], betId (= betIds[0], for v1 readers), date,
   //            history[{v,date,text}], deleted, attachments[{id, w, h}] }
   //   images: separate docs bigpicture/<syncId>__img_<id> and __thm_<id>
@@ -1022,7 +1043,7 @@
       if (day !== lastDay) { L.push(''); L.push('### ' + day); lastDay = day; }
       const bn = entryBets(e).map(b => b.name).join(' + ');
       const na = (e.attachments || []).length;
-      L.push('- ' + (bn ? '[' + bn + '] ' : '') + (e.text || '').replace(/\n+/g, ' / ') + (na ? ' (' + plural(na, 'image', 'images') + ' attached)' : ''));
+      L.push('- ' + (e.ai ? '(AI summary) ' : '') + (bn ? '[' + bn + '] ' : '') + (e.text || '').replace(/\n+/g, ' / ') + (na ? ' (' + plural(na, 'image', 'images') + ' attached)' : ''));
     });
     if (!entries.length) L.push('(none)');
     return L.join('\n');
@@ -1176,8 +1197,29 @@
         grid.appendChild(c);
       }
     }
+    // Quarter bands under the grid, one per calendar quarter, aligned to its weeks.
+    const quarters = el('div', 'heat-quarters');
+    let qStart = 0, qKey = null;
+    const qOf = d => d.getFullYear() * 4 + Math.floor(d.getMonth() / 3);
+    const flushQ = (endW) => {
+      if (qKey === null) return;
+      const weeks = endW - qStart;
+      const span = el('span', '', 'Q' + (qKey % 4 + 1) + ' ' + Math.floor(qKey / 4));
+      span.style.left = (qStart * 16) + 'px';
+      span.style.width = Math.max(0, weeks * 16 - 4) + 'px';
+      if (weeks < 3) span.textContent = '';
+      quarters.appendChild(span);
+    };
+    for (let w = 0; w < nWeeks; w++) {
+      // A week belongs to the quarter of its Thursday (ISO-style), so bands don't split mid-week.
+      const q = qOf(addDays(first, 7 * w + 3));
+      if (q !== qKey) { flushQ(w); qKey = q; qStart = w; }
+    }
+    flushQ(nWeeks);
+    quarters.style.width = (nWeeks * 16) + 'px';
     inner.appendChild(months);
     inner.appendChild(grid);
+    inner.appendChild(quarters);
     scroll.appendChild(inner);
     wrap.appendChild(scroll);
     box.appendChild(wrap);
@@ -1315,6 +1357,50 @@
     });
   }
 
+  const AI_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9zM19 14l.9 2.6 2.6.9-2.6.9L19 21l-.9-2.6-2.6-.9 2.6-.9zM5 15l.7 1.8 1.8.7-1.8.7L5 20l-.7-1.8L2.5 17.5l1.8-.7z"/></svg>';
+  function aiBadge() {
+    const b = el('span', 'ai-badge');
+    b.innerHTML = AI_ICON;
+    b.appendChild(document.createTextNode('AI summary'));
+    b.title = 'Marked as an AI summary';
+    return b;
+  }
+
+  // ⋮ menu; items = [[label, onClick, className?]]. One open at a time; closes on outside tap or Esc.
+  function kebabMenu(items) {
+    const wrap = el('span', 'kebab-wrap');
+    const btn = el('button', 'kebab', '⋮');
+    btn.type = 'button';
+    btn.title = 'More';
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = wrap.querySelector('.menu');
+      closeMenus();
+      if (open) return;
+      const menu = el('div', 'menu');
+      menu.setAttribute('role', 'menu');
+      items.forEach(([label, onClick, cls]) => {
+        const it = el('button', cls || '', label);
+        it.type = 'button';
+        it.setAttribute('role', 'menuitem');
+        it.addEventListener('click', (ev) => { ev.stopPropagation(); closeMenus(); onClick(); });
+        menu.appendChild(it);
+      });
+      wrap.appendChild(menu);
+      btn.setAttribute('aria-expanded', 'true');
+    });
+    wrap.appendChild(btn);
+    return wrap;
+  }
+  function closeMenus() {
+    document.querySelectorAll('.kebab-wrap .menu').forEach(m => m.remove());
+    document.querySelectorAll('.kebab[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  }
+  document.addEventListener('click', closeMenus);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenus(); });
+
   function renderLogEntry(entry, opts = {}) {
     ensureHistory(entry, ['text']);
     const bets = entryBets(entry);
@@ -1324,7 +1410,7 @@
       const sel = new Set(bets.map(b => b.id));
       const chips = el('div', 'chips');
       renderBetChips(chips, sel);
-      const comp = makeComposer({ text: entry.text || '', atts: entry.attachments || [] });
+      const comp = makeComposer({ text: entry.text || '', atts: entry.attachments || [], ai: !!entry.ai });
       const saveBtn = el('button', '', 'Save');
       const cancelBtn = el('button', '', 'Cancel');
       comp.bar.prepend(cancelBtn);
@@ -1346,6 +1432,7 @@
           entry.text = newText;
           setEntryBets(entry, [...sel]);
           if (attachments.length) entry.attachments = attachments; else delete entry.attachments;
+          if (comp.state.ai) entry.ai = true; else delete entry.ai;
           editingLogId = null;
           render();
           await save();
@@ -1360,11 +1447,13 @@
       return wrapper;
     }
 
+    if (entry.ai) wrapper.classList.add('ai');
     const dateP = el('p', 'log-date', opts.showTime ? fmtTime(entry.date) : fmtDay(entry.date));
     bets.forEach((b, i) => {
       dateP.appendChild(document.createTextNode((i === 0 ? ' · ' : ' + ') + b.name));
       if (!isActive(b)) dateP.appendChild(el('span', 'pill ' + betStatus(b), betStatus(b) === 'done' ? 'Done' : 'Dropped'));
     });
+    if (entry.ai) dateP.appendChild(aiBadge());
     wrapper.appendChild(dateP);
     if (entry.text) appendExpandableText(wrapper, entry.id, entry.text, LOG_LIMIT, 'log-text');
     if (entry.attachments && entry.attachments.length) {
@@ -1393,7 +1482,14 @@
       }));
     }
     // Soft delete: kept in the document (and the activity export); Undo toast + "Deleted notes" to restore.
-    actions.appendChild(linkBtn('Delete', () => deleteEntry(entry), 'danger'));
+    actions.appendChild(kebabMenu([
+      [entry.ai ? 'Unmark AI summary' : 'Mark as AI summary', async () => {
+        if (entry.ai) delete entry.ai; else entry.ai = true;
+        render();
+        await save();
+      }],
+      ['Delete', () => deleteEntry(entry), 'danger'],
+    ]));
     wrapper.appendChild(actions);
 
     if (expandedLogHistory === entry.id) {
@@ -1513,7 +1609,7 @@
   }
 
   // Text box + attachments: paste, drag-and-drop or the Attach button add pictures.
-  function makeComposer({ text = '', atts = [], placeholder = '' }) {
+  function makeComposer({ text = '', atts = [], placeholder = '', ai = false }) {
     const root = el('div', 'composer');
     const ta = el('textarea');
     ta.value = text;
@@ -1529,9 +1625,18 @@
     attachBtn.type = 'button';
     attachBtn.addEventListener('click', () => file.click());
     bar.appendChild(attachBtn);
+    const aiBtn = el('button', 'small ai-toggle');
+    aiBtn.type = 'button';
+    aiBtn.innerHTML = AI_ICON;
+    aiBtn.appendChild(document.createTextNode('AI summary'));
+    aiBtn.title = 'Mark this note as an AI summary';
+    const setAi = (v) => { state.ai = v; aiBtn.setAttribute('aria-pressed', v ? 'true' : 'false'); root.classList.toggle('ai', v); };
+    aiBtn.addEventListener('click', () => setAi(!state.ai));
+    bar.appendChild(aiBtn);
     bar.appendChild(file);
 
-    const state = { atts: [...atts], busy: 0 };
+    const state = { atts: [...atts], busy: 0, ai: false };
+    setAi(ai);
     function drawAtts() {
       row.innerHTML = '';
       state.atts.forEach(a => row.appendChild(attThumb(a, {
@@ -1602,7 +1707,7 @@
         }
         return state.atts.map(a => ({ id: a.id, w: a.w, h: a.h }));
       },
-      reset() { ta.value = ''; state.atts = []; drawAtts(); autosize(ta); },
+      reset() { ta.value = ''; state.atts = []; setAi(false); drawAtts(); autosize(ta); },
     };
   }
 
@@ -1672,6 +1777,7 @@
       const attachments = await logComposer.commit();
       const date = new Date().toISOString();
       const entry = { id: 'log_' + Date.now(), text, date, history: [{ v: 1, date, text }] };
+      if (logComposer.state.ai) entry.ai = true;
       setEntryBets(entry, [...composeBets]);
       if (attachments.length) entry.attachments = attachments;
       data.log.push(entry);
@@ -1792,7 +1898,7 @@
         rows.push({
           item_type: 'log', item_id: entry.id, version: h.v, is_current: h.v === currentV ? 'yes' : 'no',
           date: h.date, name: '', why: '', text: h.text, bet_id: entryBetIds(entry).join(';'), bet_name: betNames,
-          status: '', closed: '', outcome: '', deleted: entry.deleted || '', attachments: nAtt
+          status: '', closed: '', outcome: '', deleted: entry.deleted || '', attachments: nAtt, ai: entry.ai ? 'yes' : ''
         });
       });
     });
@@ -1810,7 +1916,7 @@
   });
 
   document.getElementById('export-versions-btn').addEventListener('click', () => {
-    const headers = ['item_type', 'item_id', 'version', 'is_current', 'date', 'name', 'why', 'text', 'bet_id', 'bet_name', 'status', 'closed', 'outcome', 'deleted', 'attachments'];
+    const headers = ['item_type', 'item_id', 'version', 'is_current', 'date', 'name', 'why', 'text', 'bet_id', 'bet_name', 'status', 'closed', 'outcome', 'deleted', 'attachments', 'ai'];
     downloadFile('big-picture-versions.csv', toCsv(buildVersionsRows(), headers), 'text/csv;charset=utf-8;');
   });
 </script>
