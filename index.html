@@ -180,6 +180,45 @@
   .att .x { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.65); color: #fff; font-size: 13px; line-height: 20px; text-align: center; }
   .att .ph { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 11px; color: var(--text-muted); }
   .compose-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  /* v2.2: calendar, day card, toast */
+  :root { --heat-0: #ebe9e2; --heat-1: #9be9a8; --heat-2: #40c463; --heat-3: #30a14e; --heat-4: #216e39; }
+  @media (prefers-color-scheme: dark) {
+    :root { --heat-0: #333331; --heat-1: #0e4429; --heat-2: #006d32; --heat-3: #26a641; --heat-4: #39d353; }
+  }
+  .heat { display: flex; gap: 6px; margin-top: 12px; }
+  .heat-days { display: grid; grid-template-rows: 14px repeat(7, 13px); row-gap: 3px; font-size: 10px; color: var(--text-muted); flex: none; }
+  .heat-days span { line-height: 13px; }
+  .heat-scroll { overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: thin; }
+  .heat-inner { position: relative; display: inline-block; padding-top: 17px; padding-right: 14px; }
+  .heat-months { position: absolute; top: 0; left: 0; height: 14px; font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+  .heat-months span { position: absolute; }
+  .heat-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 13px); grid-auto-columns: 13px; gap: 3px; }
+  .cell { width: 13px; height: 13px; border-radius: 3px; background: var(--heat-0); border: none; padding: 0; }
+  .cell.l1 { background: var(--heat-1); } .cell.l2 { background: var(--heat-2); }
+  .cell.l3 { background: var(--heat-3); } .cell.l4 { background: var(--heat-4); }
+  .cell.has { cursor: pointer; }
+  .cell.future { background: transparent; }
+  .cell.today { outline: 1.5px solid var(--text-secondary); outline-offset: 1px; }
+  .cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .cell.dim { opacity: 0.2; }
+  .heat-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11px; color: var(--text-muted); }
+  .legend { display: flex; align-items: center; gap: 3px; }
+  .legend .cell { width: 10px; height: 10px; border-radius: 2px; }
+  .log-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+  .log-head .seg { margin-bottom: 0; }
+  .sheet-back { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
+  .sheet { background: var(--bg); width: 100%; max-width: 560px; max-height: 82vh; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; box-shadow: 0 -4px 24px rgba(0,0,0,0.2); }
+  @media (min-width: 640px) { .sheet-back { align-items: center; } .sheet { border-radius: 16px; max-height: 80vh; } }
+  .sheet-head { display: flex; align-items: center; gap: 6px; padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--border); }
+  .sheet-title { flex: 1; min-width: 0; }
+  .sheet-title strong { display: block; font-size: 15px; }
+  .sheet-title span { font-size: 12px; color: var(--text-muted); }
+  .icon-btn { width: 34px; height: 34px; padding: 0; font-size: 16px; line-height: 1; flex: none; }
+  .icon-btn:disabled { opacity: 0.35; cursor: default; }
+  .sheet-body { overflow-y: auto; padding: 12px 16px 24px; -webkit-overflow-scrolling: touch; }
+  .sheet-body .log-entry:last-child { border-bottom: none; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: 14px; display: flex; gap: 14px; align-items: center; z-index: 60; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
+  .toast a { color: var(--accent-soft); font-weight: 600; cursor: pointer; }
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; cursor: zoom-out; }
   .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
 </style>
@@ -235,15 +274,20 @@
     </div>
 
     <div class="section divider">
-      <h2 style="margin-bottom:0.75rem;">Log</h2>
+      <div class="log-head">
+        <h2>Log</h2>
+        <div class="seg" id="log-view"></div>
+      </div>
       <div class="filters">
         <select id="filter-bet"></select>
         <input id="filter-text" type="search" placeholder="Search" autocapitalize="off" />
       </div>
+      <div id="heatmap"></div>
       <div id="log-list"></div>
       <div id="log-more" style="text-align:center; display:none;">
         <button id="log-more-btn" class="small">Show older</button>
       </div>
+      <div id="deleted-box"></div>
     </div>
 
     <div class="section divider">
@@ -276,7 +320,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '2.1';
+  const APP_VERSION = '2.2';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -311,6 +355,10 @@
   let logLimit = 20;
   let filterBet = 'all';
   let filterText = '';
+  let logView = 'calendar';     // 'calendar' | 'list'; a search always shows matching notes as a list
+  let openDay = null;           // 'YYYY-MM-DD' of the day card, or null
+  let heatScrolledToEnd = false;
+  let showDeleted = false;
 
   const WHY_LIMIT = 160;
   const LOG_LIMIT = 240;
@@ -563,6 +611,7 @@
     renderLogSelect();
     renderReview();
     renderLog();
+    renderDaySheet();
     requestAnimationFrame(() => document.querySelectorAll('#app textarea').forEach(autosize));
   }
 
@@ -999,14 +1048,35 @@
     betOptions(fsel, { includeClosed: true, selected: filterBet, extra: [['all', 'All entries'], ['general', 'General notes']] });
     filterBet = fsel.value;
 
+    const seg = document.getElementById('log-view');
+    seg.innerHTML = '';
+    [['calendar', 'Calendar'], ['list', 'List']].forEach(([k, label]) => {
+      const b = el('button', logView === k ? 'on' : '', label);
+      b.addEventListener('click', () => { logView = k; logLimit = LOG_PAGE; render(); });
+      seg.appendChild(b);
+    });
+
     const q = filterText.toLowerCase();
-    const filtered = liveLog()
-      .filter(e => filterBet === 'all' || (filterBet === 'general' ? !entryBets(e).length : entryBetIds(e).includes(filterBet)))
+    const byBet = betFiltered();
+    const filtered = byBet
       .filter(e => !q || (e.text || '').toLowerCase().includes(q))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
 
+    renderHeatmap(byBet, q ? new Set(filtered.map(e => dayKey(e.date))) : null);
+    renderDeleted();
+
     const logList = document.getElementById('log-list');
     logList.innerHTML = '';
+    const more = document.getElementById('log-more');
+    if (logView === 'calendar' && !q) {
+      more.style.display = 'none';
+      return;
+    }
+    if (q) {
+      const h = el('p', 'small-muted', plural(filtered.length, 'note', 'notes') + ' matching "' + filterText.trim() + '"');
+      h.style.margin = '12px 0 0';
+      logList.appendChild(h);
+    }
     if (!filtered.length) {
       logList.appendChild(el('p', 'muted', data.log.length ? 'No matching entries.' : 'No entries yet.'));
       logList.lastChild.style.marginTop = '12px';
@@ -1033,12 +1103,219 @@
       logList.appendChild(renderLogEntry(entry));
     });
 
-    const more = document.getElementById('log-more');
     more.style.display = filtered.length > logLimit ? 'block' : 'none';
     document.getElementById('log-more-btn').textContent = 'Show older (' + (filtered.length - logLimit) + ' more)';
   }
 
-  function renderLogEntry(entry) {
+  function betFiltered() {
+    return liveLog().filter(e => filterBet === 'all' || (filterBet === 'general' ? !entryBets(e).length : entryBetIds(e).includes(filterBet)));
+  }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function dayKey(d) { const x = new Date(d); return x.getFullYear() + '-' + pad2(x.getMonth() + 1) + '-' + pad2(x.getDate()); }
+  function keyToDate(k) { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); }
+  function fmtTime(d) { return new Date(d).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
+
+  // GitHub-style grid: one column per week (Mon at top), one square per day,
+  // shaded by how many notes that day has under the current bet filter.
+  // `matchDays` (when searching) dims every day without a matching note.
+  function renderHeatmap(entries, matchDays) {
+    const box = document.getElementById('heatmap');
+    const prevScroll = box.querySelector('.heat-scroll');
+    const keepLeft = prevScroll ? prevScroll.scrollLeft : null;
+    box.innerHTML = '';
+    const counts = new Map();
+    entries.forEach(e => { const k = dayKey(e.date); counts.set(k, (counts.get(k) || 0) + 1); });
+
+    const today = new Date();
+    const lastWeek = weekStart(today);
+    let first = addDays(lastWeek, -7 * 25);                 // at least 26 weeks
+    if (entries.length) {
+      const earliest = weekStart(entries.reduce((a, b) => new Date(a.date) < new Date(b.date) ? a : b).date);
+      if (earliest < first) first = earliest;
+    }
+    const nWeeks = Math.round((lastWeek - first) / (7 * 86400000)) + 1;
+    const todayKey = dayKey(today);
+    const level = n => n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : n <= 4 ? 3 : 4;
+
+    const wrap = el('div', 'heat');
+    const days = el('div', 'heat-days');
+    ['', 'Mon', '', 'Wed', '', 'Fri', '', 'Sun'].forEach(t => days.appendChild(el('span', '', t)));
+    wrap.appendChild(days);
+    const scroll = el('div', 'heat-scroll');
+    const inner = el('div', 'heat-inner');
+    const months = el('div', 'heat-months');
+    const grid = el('div', 'heat-grid');
+    let lastMonth = -1;
+    let lastLabelW = -99;
+    for (let w = 0; w < nWeeks; w++) {
+      const monday = addDays(first, 7 * w);
+      // Label a month on the first week whose Monday falls in it.
+      if (monday.getMonth() !== lastMonth) {
+        lastMonth = monday.getMonth();
+        if (w - lastLabelW >= 3) {
+          lastLabelW = w;
+          const m = el('span', '', monday.toLocaleDateString(undefined, { month: 'short' }));
+          m.style.left = (w * 16) + 'px';
+          months.appendChild(m);
+        }
+      }
+      for (let d = 0; d < 7; d++) {
+        const day = addDays(monday, d);
+        const k = dayKey(day);
+        const n = counts.get(k) || 0;
+        const c = el('button', 'cell');
+        c.type = 'button';
+        if (day > today && k !== todayKey) { c.className = 'cell future'; c.disabled = true; grid.appendChild(c); continue; }
+        if (n) c.classList.add('l' + level(n), 'has');
+        if (k === todayKey) c.classList.add('today');
+        if (k === openDay) c.classList.add('sel');
+        if (matchDays && !matchDays.has(k)) c.classList.add('dim');
+        c.title = fmtDay(day) + ' — ' + (n ? plural(n, 'note', 'notes') : 'no notes');
+        c.setAttribute('aria-label', c.title);
+        if (n) c.addEventListener('click', () => { openDay = k; render(); });
+        grid.appendChild(c);
+      }
+    }
+    inner.appendChild(months);
+    inner.appendChild(grid);
+    scroll.appendChild(inner);
+    wrap.appendChild(scroll);
+    box.appendChild(wrap);
+
+    // Footer: count over the visible span + legend
+    const foot = el('div', 'heat-foot');
+    foot.appendChild(el('span', '', plural(entries.length, 'note', 'notes') + ' on ' + plural(counts.size, 'day', 'days')));
+    const legend = el('span', 'legend');
+    legend.appendChild(document.createTextNode('Less '));
+    [0, 1, 2, 3, 4].forEach(l => legend.appendChild(el('span', 'cell' + (l ? ' l' + l : ''))));
+    legend.appendChild(document.createTextNode(' More'));
+    foot.appendChild(legend);
+    box.appendChild(foot);
+
+    // Start scrolled to the newest week; afterwards keep the user's position.
+    requestAnimationFrame(() => {
+      if (!heatScrolledToEnd || keepLeft === null) { scroll.scrollLeft = scroll.scrollWidth; heatScrolledToEnd = true; }
+      else scroll.scrollLeft = keepLeft;
+    });
+  }
+
+  // Day card: every note of one day, scrollable; ‹ › step to the previous/next day with notes.
+  function renderDaySheet() {
+    let back = document.getElementById('day-sheet');
+    if (!openDay) { if (back) back.remove(); document.body.style.overflow = ''; return; }
+    const entries = betFiltered().filter(e => dayKey(e.date) === openDay)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const daysWith = [...new Set(betFiltered().map(e => dayKey(e.date)))].sort();
+    const idx = daysWith.indexOf(openDay);
+    const prevDay = idx > 0 ? daysWith[idx - 1] : (idx === -1 ? daysWith.filter(k => k < openDay).pop() : null);
+    const nextDay = idx >= 0 ? daysWith[idx + 1] : daysWith.find(k => k > openDay);
+
+    let keepTop = 0;
+    if (back) {
+      const body = back.querySelector('.sheet-body');
+      if (body && back.dataset.day === openDay) keepTop = body.scrollTop;
+      back.remove();
+    }
+    back = el('div', 'sheet-back');
+    back.id = 'day-sheet';
+    back.dataset.day = openDay;
+    back.addEventListener('click', (e) => { if (e.target === back) closeDay(); });
+    const sheet = el('div', 'sheet');
+    sheet.setAttribute('role', 'dialog');
+    const head = el('div', 'sheet-head');
+    const title = el('div', 'sheet-title');
+    title.appendChild(el('strong', '', keyToDate(openDay).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })));
+    title.appendChild(el('span', '', plural(entries.length, 'note', 'notes')));
+    const prevBtn = el('button', 'icon-btn', '‹');
+    prevBtn.title = 'Previous day with notes';
+    prevBtn.disabled = !prevDay;
+    prevBtn.addEventListener('click', () => { openDay = prevDay; editingLogId = null; render(); });
+    const nextBtn = el('button', 'icon-btn', '›');
+    nextBtn.title = 'Next day with notes';
+    nextBtn.disabled = !nextDay;
+    nextBtn.addEventListener('click', () => { openDay = nextDay; editingLogId = null; render(); });
+    const closeBtn = el('button', 'icon-btn', '×');
+    closeBtn.title = 'Close';
+    closeBtn.addEventListener('click', closeDay);
+    head.appendChild(title);
+    head.appendChild(prevBtn);
+    head.appendChild(nextBtn);
+    head.appendChild(closeBtn);
+    const body = el('div', 'sheet-body');
+    if (!entries.length) body.appendChild(el('p', 'muted', 'No notes this day.'));
+    entries.forEach(e => body.appendChild(renderLogEntry(e, { showTime: true })));
+    sheet.appendChild(head);
+    sheet.appendChild(body);
+    back.appendChild(sheet);
+    document.body.appendChild(back);
+    document.body.style.overflow = 'hidden';
+    body.scrollTop = keepTop;
+  }
+  function closeDay() { openDay = null; editingLogId = null; render(); }
+  document.addEventListener('keydown', (e) => {
+    if (!openDay || document.querySelector('.lightbox')) return;
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    if (e.key === 'Escape') closeDay();
+    else if (e.key === 'ArrowLeft') document.querySelector('#day-sheet .icon-btn:nth-of-type(1)')?.click();
+    else if (e.key === 'ArrowRight') document.querySelector('#day-sheet .icon-btn:nth-of-type(2)')?.click();
+  });
+
+  // ---------- delete / undo / restore ----------
+  let toastTimer = null;
+  function showToast(text, actionLabel, onAction) {
+    document.querySelectorAll('.toast').forEach(t => t.remove());
+    clearTimeout(toastTimer);
+    const t = el('div', 'toast');
+    t.appendChild(el('span', '', text));
+    if (actionLabel) {
+      const a = el('a', '', actionLabel);
+      a.addEventListener('click', () => { t.remove(); onAction(); });
+      t.appendChild(a);
+    }
+    document.body.appendChild(t);
+    toastTimer = setTimeout(() => t.remove(), 7000);
+  }
+  async function deleteEntry(entry) {
+    entry.deleted = new Date().toISOString();
+    render();
+    showToast('Note deleted', 'Undo', () => restoreEntry(entry));
+    await save();
+  }
+  async function restoreEntry(entry) {
+    delete entry.deleted;
+    render();
+    await save();
+  }
+  function renderDeleted() {
+    const box = document.getElementById('deleted-box');
+    box.innerHTML = '';
+    const deleted = data.log.filter(e => e.deleted).sort((a, b) => new Date(b.deleted) - new Date(a.deleted));
+    if (!deleted.length) return;
+    const head = el('div', 'toggle-head');
+    head.style.margin = '18px 0 8px';
+    head.appendChild(el('span', 'small-muted', 'Deleted notes (' + deleted.length + ')'));
+    head.appendChild(el('span', 'link-btn', showDeleted ? 'Hide' : 'Show'));
+    head.addEventListener('click', () => { showDeleted = !showDeleted; render(); });
+    box.appendChild(head);
+    if (!showDeleted) return;
+    deleted.forEach(e => {
+      const w = el('div', 'log-entry');
+      w.style.opacity = '0.75';
+      w.appendChild(el('p', 'log-date', fmtDay(e.date) + ' · deleted ' + fmtDate(e.deleted)));
+      if (e.text) appendExpandableText(w, 'del-' + e.id, e.text, LOG_LIMIT, 'log-text');
+      if (e.attachments && e.attachments.length) {
+        const row = el('div', 'att-row');
+        e.attachments.forEach(a => row.appendChild(attThumb(a, {})));
+        w.appendChild(row);
+      }
+      const actions = el('div', 'card-actions');
+      actions.appendChild(linkBtn('Restore', () => restoreEntry(e)));
+      w.appendChild(actions);
+      box.appendChild(w);
+    });
+  }
+
+  function renderLogEntry(entry, opts = {}) {
     ensureHistory(entry, ['text']);
     const bets = entryBets(entry);
     const wrapper = el('div', 'log-entry');
@@ -1083,7 +1360,7 @@
       return wrapper;
     }
 
-    const dateP = el('p', 'log-date', fmtDay(entry.date));
+    const dateP = el('p', 'log-date', opts.showTime ? fmtTime(entry.date) : fmtDay(entry.date));
     bets.forEach((b, i) => {
       dateP.appendChild(document.createTextNode((i === 0 ? ' · ' : ' + ') + b.name));
       if (!isActive(b)) dateP.appendChild(el('span', 'pill ' + betStatus(b), betStatus(b) === 'done' ? 'Done' : 'Dropped'));
@@ -1115,13 +1392,8 @@
         render();
       }));
     }
-    actions.appendChild(linkBtn('Delete', async () => {
-      if (!confirm('Delete this entry?')) return;
-      // Soft delete: kept in the document (and the activity export) so it can be recovered.
-      entry.deleted = new Date().toISOString();
-      render();
-      await save();
-    }, 'danger'));
+    // Soft delete: kept in the document (and the activity export); Undo toast + "Deleted notes" to restore.
+    actions.appendChild(linkBtn('Delete', () => deleteEntry(entry), 'danger'));
     wrapper.appendChild(actions);
 
     if (expandedLogHistory === entry.id) {
