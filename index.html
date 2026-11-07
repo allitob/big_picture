@@ -403,7 +403,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '2.7';
+  const APP_VERSION = '2.8';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -437,8 +437,7 @@
   let showClosed = false;
   let showFuture = false;
   let expandedBetId = null;
-  const CHIP_LIMIT = 5;
-  let showAllChips = false;
+  let chipsOpen = false;
   let reviewRange = 'week';
   let logLimit = 20;
   let filterBet = 'all';
@@ -1002,16 +1001,6 @@
       ['Export activity log (.csv)', () => document.getElementById('export-activity-btn').click()],
       ['Export versions table (.csv)', () => document.getElementById('export-versions-btn').click()],
       ['Import plan…', () => importInput.click()],
-      ['Haiku key…', () => {
-        const cur = aiKey();
-        const v = prompt(cur ? 'Haiku tagging is on for this device. Paste a new Anthropic API key, or clear the field to turn it off.' :
-          'Paste an Anthropic API key to let Haiku suggest bets (stored only in this browser).', cur ? '••••' + cur.slice(-4) : '');
-        if (v === null || v.startsWith('••••')) return;
-        try { if (v.trim()) localStorage.setItem(AI_KEY, v.trim()); else localStorage.removeItem(AI_KEY); } catch (e) {}
-        hintMsg = null;
-        renderComposeHint();
-        refreshSuggestBtn();
-      }],
       ['Change sync ID…', () => document.getElementById('change-sync-id').click()],
     ]);
     const b = k.querySelector('.kebab');
@@ -1301,34 +1290,35 @@
     if (select.value !== selected) select.value = (extra && extra[0]) ? extra[0][0] : '';
   }
 
-  // Toggleable bet chips. Shows active bets, plus any closed bet already in `selected`.
-  // Most recently used bets first; only the first few (plus anything selected) are
-  // shown until "+N more" is tapped.
-  function renderBetChips(container, selected) {
+  // Toggleable bet chips, most recently used first. With `collapsible` (Log today)
+  // only the selected bets show until "Bets ▸" opens the full list.
+  function renderBetChips(container, selected, opts = {}) {
     container.innerHTML = '';
     const recency = b => { const lt = lastTouch(b.id); return lt ? new Date(lt).getTime() : 0; };
     const all = data.bets.filter(b => isActive(b) || selected.has(b.id))
       .sort((a, b) => recency(b) - recency(a));
-    const bets = showAllChips ? all : all.filter((b, i) => i < CHIP_LIMIT || selected.has(b.id));
-    const hidden = all.length - bets.length;
+    const open = !opts.collapsible || chipsOpen;
+    const bets = open ? all : all.filter(b => selected.has(b.id));
     bets.forEach(b => {
       const c = el('button', 'chip' + (selected.has(b.id) ? ' on' : ''), b.name);
       c.type = 'button';
       c.title = b.name;
       c.addEventListener('click', () => {
         if (selected.has(b.id)) selected.delete(b.id); else selected.add(b.id);
+        if (!open) { renderBetChips(container, selected, opts); return; }   // deselected chip disappears
         c.classList.toggle('on', selected.has(b.id));
         hint.style.display = selected.size ? 'none' : '';
       });
       container.appendChild(c);
     });
-    if (hidden > 0 || (showAllChips && all.length > CHIP_LIMIT)) {
-      const more = el('button', 'chip more', hidden > 0 ? '+' + hidden + ' more' : 'Fewer');
-      more.type = 'button';
-      more.addEventListener('click', () => { showAllChips = !showAllChips; renderBetChips(container, selected); });
-      container.appendChild(more);
+    if (opts.collapsible && all.length) {
+      const t = el('button', 'chip more', open ? 'Done ▴' : (selected.size ? 'Bets ▸' : '+ Bets ▸'));
+      t.type = 'button';
+      t.title = open ? 'Hide the bet list' : 'Pick bets for this note';
+      t.addEventListener('click', () => { chipsOpen = !chipsOpen; renderBetChips(container, selected, opts); });
+      container.appendChild(t);
     }
-    const hint = el('span', 'chip-hint', bets.length ? 'None = general note' : 'General note (no active bets)');
+    const hint = el('span', 'chip-hint', all.length ? 'None = general note' : 'General note (no active bets)');
     hint.style.display = selected.size ? 'none' : '';
     container.appendChild(hint);
   }
@@ -1336,7 +1326,7 @@
   const composeBets = new Set();
   function renderLogSelect() {
     [...composeBets].forEach(id => { const b = data.bets.find(x => x.id === id); if (!b || !isActive(b)) composeBets.delete(id); });
-    renderBetChips(document.getElementById('log-bet-chips'), composeBets);
+    renderBetChips(document.getElementById('log-bet-chips'), composeBets, { collapsible: true });
   }
 
   // ---------- review ----------
@@ -2230,7 +2220,7 @@
   logComposer.root.insertBefore(composeHint, logComposer.ta.nextSibling);
 
   // ----- Haiku bet suggestions -----
-  // Optional. The Anthropic API key is pasted per device (⚙ → Haiku key) and kept
+  // Optional. The Anthropic API key is asked for on the first Suggest tap per device and kept
   // only in this browser's localStorage — never in the repo or the synced doc.
   const AI_KEY = 'bp-anthropic-key';
   const AI_MODEL = 'claude-haiku-5-5';
@@ -2242,14 +2232,14 @@
     if (hintMsg) { composeHint.appendChild(hintMsg); return; }
     if (!desktopKeys) return;
     const k = (t) => el('kbd', '', t);
-    composeHint.append(k('Enter'), ' add entry · ', k('Shift'), '+', k('Enter'), aiKey() ? ' Haiku suggests bets · ' : ' suggest bets (set a Haiku key in ⚙) · ', k('Ctrl'), '+', k('Enter'), ' new line');
+    composeHint.append(k('Enter'), ' add entry · ', k('Shift'), '+', k('Enter'), ' new line');
   }
   const suggestBtn = el('button', 'small ai-suggest', '✦ Suggest bets');
   suggestBtn.type = 'button';
   suggestBtn.title = 'Ask Haiku which bets this note belongs to';
   suggestBtn.addEventListener('click', () => suggestBets());
   logComposer.bar.insertBefore(suggestBtn, logComposer.bar.children[1] || null);
-  function refreshSuggestBtn() { suggestBtn.style.display = aiKey() && !desktopKeys ? '' : 'none'; }
+  function refreshSuggestBtn() {}
 
   function betBriefs() {
     return data.bets.filter(isActive).map(b => {
@@ -2263,9 +2253,15 @@
   let suggesting = false;
   async function suggestBets() {
     const text = logComposer.ta.value.trim();
-    const key = aiKey();
+    let key = aiKey();
     const say = (cls, t) => { hintMsg = el('span', cls, t); renderComposeHint(); };
-    if (!key) { say('err', 'No Haiku key on this device — add one in ⚙ → Haiku key.'); return; }
+    if (!key) {
+      // First use on this device: ask once; stored only in this browser.
+      const v = prompt('Paste an Anthropic API key so Haiku can suggest bets. It is stored only in this browser.');
+      if (!v || !v.trim()) return;
+      try { localStorage.setItem(AI_KEY, v.trim()); } catch (e) {}
+      key = v.trim();
+    }
     if (!text) { say('err', 'Write the note first, then ask for bets.'); return; }
     if (suggesting) return;
     const active = data.bets.filter(isActive);
@@ -2292,12 +2288,13 @@
         }),
       });
       const body = await res.json().catch(() => ({}));
+      if (res.status === 401) { try { localStorage.removeItem(AI_KEY); } catch (e) {} }   // bad key: ask again next time
       if (!res.ok) throw new Error((body.error && body.error.message) || ('HTTP ' + res.status));
       const out = (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
       const m = out.match(/\{[\s\S]*\}/);
       const ids = ((m && JSON.parse(m[0]).bet_ids) || []).filter(id => active.some(b => b.id === id));
       ids.forEach(id => composeBets.add(id));
-      renderLogSelect();
+      renderLogSelect();          // selected bets show even while the list is folded
       say('ai-note', ids.length
         ? '✦ Haiku: ' + ids.map(id => active.find(b => b.id === id).name).join(' + ') + (desktopKeys ? ' — adjust, then Enter to add' : '')
         : '✦ Haiku: no bet fits — general note' + (desktopKeys ? ' (Enter to add)' : ''));
@@ -2309,18 +2306,11 @@
     }
   }
 
+  // Desktop: Enter adds the entry; Shift+Enter (browser default) makes a new line.
   logComposer.ta.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || e.isComposing || !desktopKeys) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) {                  // new line
-      e.preventDefault();
-      const t = logComposer.ta, a = t.selectionStart, b = t.selectionEnd;
-      t.value = t.value.slice(0, a) + '\n' + t.value.slice(b);
-      t.selectionStart = t.selectionEnd = a + 1;
-      autosize(t);
-      return;
-    }
+    if (e.key !== 'Enter' || e.isComposing || !desktopKeys || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault();
-    if (e.shiftKey) suggestBets(); else addEntryBtn.click();
+    addEntryBtn.click();
   });
   logComposer.ta.addEventListener('input', () => { if (hintMsg && hintMsg.classList.contains('err')) { hintMsg = null; renderComposeHint(); } });
   renderComposeHint();
@@ -2342,6 +2332,7 @@
       data.log.push(entry);
       logComposer.reset();
       composeBets.clear();
+      chipsOpen = false;
       hintMsg = null;
       renderComposeHint();
       render();
