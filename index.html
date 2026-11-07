@@ -239,13 +239,40 @@
   .ai-badge svg, .ai-toggle svg { width: 12px; height: 12px; fill: currentColor; }
   .ai-toggle { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); }
   .ai-toggle[aria-pressed="true"] { background: var(--ai-bg); border-color: var(--ai); color: var(--ai); font-weight: 600; }
+  /* v2.4: layout — writing first, folding side sections, settings menu */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 1.25rem; }
+  .top .title-row { margin-bottom: 0; }
+  .gear { font-size: 17px; padding: 4px 8px; }
+  .layout { display: block; }
+  .col-side .fold { border-top: 1px solid var(--border); }
+  .fold-head { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; border-radius: 0; padding: 14px 0; text-align: left; cursor: pointer; }
+  .fold-head h2 { flex: none; }
+  .fold-sum { flex: 1; min-width: 0; font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fold-sum .warn { color: var(--warning-text); }
+  .fold-chev { flex: none; color: var(--text-muted); transition: transform 0.15s; font-size: 14px; }
+  .fold:not(.collapsed) .fold-chev { transform: rotate(90deg); }
+  .fold-body { padding-bottom: 1.5rem; }
+  .fold.collapsed .fold-body { display: none; }
+  .fold-tools { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 10px; }
+  @media (min-width: 900px) {
+    .wrap { max-width: 1120px; padding: 2rem 1.5rem 4rem; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 40px; align-items: start; }
+    .col-side { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 4px; }
+    .col-side .fold:first-child { border-top: none; }
+    .fold.collapsed .fold-body { display: block; }
+    .fold-head { cursor: default; padding-top: 0; }
+    .fold-chev { display: none; }
+  }
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; cursor: zoom-out; }
   .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="title-row"><h1>Big picture</h1><span id="version" class="version"></span></div>
+  <header class="top">
+    <div class="title-row"><h1>Big picture</h1><span id="version" class="version"></span></div>
+    <span id="settings-slot"></span>
+  </header>
   <div id="status" class="status">Connecting…</div>
 
   <form id="setup" class="form-card" style="display:none;" autocomplete="on">
@@ -258,67 +285,74 @@
   <div id="app" style="display:none;">
     <div id="nudge" class="nudge"></div>
 
-    <div class="section">
-      <div class="row">
-        <h2>Bets</h2>
-        <button id="add-bet-btn">+ Add bet</button>
-      </div>
-      <div id="add-bet-form" class="form-card" style="display:none;">
-        <input id="bet-name" placeholder="Name (e.g. Payload gantry)" />
-        <textarea id="bet-why" placeholder="Why it matters, in a sentence"></textarea>
-        <div class="btn-row">
-          <button id="save-bet-btn">Save bet</button>
-          <button id="cancel-bet-btn">Cancel</button>
+    <div class="layout">
+      <main class="col-main">
+        <div class="section">
+          <h2 style="margin-bottom:0.75rem;">Log today</h2>
+          <div id="log-bet-chips" class="chips"></div>
+          <div id="log-composer" class="composer"></div>
         </div>
-      </div>
-      <div id="bets-list"></div>
-      <div id="closed-bets"></div>
-    </div>
 
-    <div class="section divider">
-      <h2 style="margin-bottom:0.75rem;">Log today</h2>
-      <div id="log-bet-chips" class="chips"></div>
-      <div id="log-composer" class="composer"></div>
-    </div>
-
-    <div class="section divider">
-      <div class="row">
-        <h2>Review</h2>
-        <div>
-          <span id="copied-flag" class="copied" style="display:none;">Copied</span>
-          <button id="copy-review-btn" class="small">Copy for review</button>
+        <div class="section divider">
+          <div class="log-head">
+            <h2>Log</h2>
+            <div class="seg" id="log-view"></div>
+          </div>
+          <div class="filters">
+            <select id="filter-bet"></select>
+            <input id="filter-text" type="search" placeholder="Search" autocapitalize="off" />
+          </div>
+          <div id="heatmap"></div>
+          <div id="log-list"></div>
+          <div id="log-more" style="text-align:center; display:none;">
+            <button id="log-more-btn" class="small">Show older</button>
+          </div>
+          <div id="deleted-box"></div>
         </div>
-      </div>
-      <div class="seg" id="review-range"></div>
-      <div id="review"></div>
+      </main>
+
+      <aside class="col-side">
+        <section class="fold" id="fold-bets">
+          <button class="fold-head" type="button" aria-expanded="true">
+            <h2>Bets</h2><span class="fold-sum" id="bets-sum"></span><span class="fold-chev">▸</span>
+          </button>
+          <div class="fold-body">
+            <div class="fold-tools"><button id="add-bet-btn" class="small">+ Add bet</button></div>
+            <div id="add-bet-form" class="form-card" style="display:none;">
+              <input id="bet-name" placeholder="Name (e.g. Payload gantry)" />
+              <textarea id="bet-why" placeholder="Why it matters, in a sentence"></textarea>
+              <div class="btn-row">
+                <button id="save-bet-btn">Save bet</button>
+                <button id="cancel-bet-btn">Cancel</button>
+              </div>
+            </div>
+            <div id="bets-list"></div>
+            <div id="closed-bets"></div>
+          </div>
+        </section>
+
+        <section class="fold" id="fold-review">
+          <button class="fold-head" type="button" aria-expanded="true">
+            <h2>Review</h2><span class="fold-sum" id="review-sum"></span><span class="fold-chev">▸</span>
+          </button>
+          <div class="fold-body">
+            <div class="fold-tools">
+              <span id="copied-flag" class="copied" style="display:none;">Copied</span>
+              <button id="copy-review-btn" class="small">Copy for review</button>
+            </div>
+            <div class="seg" id="review-range"></div>
+            <div id="review"></div>
+          </div>
+        </section>
+      </aside>
     </div>
 
-    <div class="section divider">
-      <div class="log-head">
-        <h2>Log</h2>
-        <div class="seg" id="log-view"></div>
-      </div>
-      <div class="filters">
-        <select id="filter-bet"></select>
-        <input id="filter-text" type="search" placeholder="Search" autocapitalize="off" />
-      </div>
-      <div id="heatmap"></div>
-      <div id="log-list"></div>
-      <div id="log-more" style="text-align:center; display:none;">
-        <button id="log-more-btn" class="small">Show older</button>
-      </div>
-      <div id="deleted-box"></div>
+    <!-- Reached from the ⚙ menu -->
+    <div hidden>
+      <button id="export-activity-btn">Activity log (.csv)</button>
+      <button id="export-versions-btn">Versions table (.csv)</button>
+      <a id="change-sync-id" href="#">change sync ID</a>
     </div>
-
-    <div class="section divider">
-      <h2 style="margin-bottom:0.75rem;">Export</h2>
-      <div class="btn-row">
-        <button id="export-activity-btn">Activity log (.csv)</button>
-        <button id="export-versions-btn">Versions table (.csv)</button>
-      </div>
-    </div>
-
-    <p class="muted" style="text-align:center;"><a id="change-sync-id" href="#" style="color:inherit;">change sync ID</a></p>
   </div>
 </div>
 
@@ -340,7 +374,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '2.3';
+  const APP_VERSION = '2.4';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -434,6 +468,11 @@
     await load();
     statusEl.style.display = 'none';
     appEl.style.display = 'block';
+    render();   // again now that widths are known (calendar fits its column)
+    // Desktop: cursor straight into the writing box. Not on touch screens, where it would pop the keyboard.
+    if (window.matchMedia('(min-width: 900px) and (pointer: fine)').matches) {
+      requestAnimationFrame(() => document.getElementById('log-text').focus());
+    }
   }
 
   setupEl.addEventListener('submit', (e) => {
@@ -627,6 +666,7 @@
   // ---------- render ----------
   function render() {
     renderNudge();
+    renderFoldSummaries();
     renderBets();
     renderClosedBets();
     renderLogSelect();
@@ -649,6 +689,69 @@
       nudge.style.display = 'none';
     }
   }
+
+  // ---------- folding side sections + settings ----------
+  // Bets and Review fold to a one-line summary on narrow screens (remembered per
+  // device); on wide screens they sit open in the sticky sidebar.
+  const FOLD_KEY = id => 'bp-fold-' + id;
+  function foldState(id) { try { return localStorage.getItem(FOLD_KEY(id)); } catch (e) { return null; } }
+  document.querySelectorAll('.fold').forEach(sec => {
+    const id = sec.id.replace('fold-', '');
+    const head = sec.querySelector('.fold-head');
+    const apply = (collapsed) => {
+      sec.classList.toggle('collapsed', collapsed);
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+    apply(foldState(id) !== 'open');                // collapsed unless opened before
+    head.addEventListener('click', () => {
+      if (window.matchMedia('(min-width: 900px)').matches) return;
+      const collapsed = !sec.classList.contains('collapsed');
+      apply(collapsed);
+      try { localStorage.setItem(FOLD_KEY(id), collapsed ? 'closed' : 'open'); } catch (e) {}
+      if (!collapsed) requestAnimationFrame(() => sec.querySelectorAll('textarea').forEach(autosize));
+    });
+  });
+  function openFold(id) {
+    const sec = document.getElementById('fold-' + id);
+    if (sec && sec.classList.contains('collapsed')) sec.querySelector('.fold-head').click();
+  }
+
+  function quietBets() {
+    return data.bets.filter(b => {
+      if (!isActive(b)) return false;
+      const lt = lastTouch(b.id);
+      return daysSince(lt || b.created || b.history[0].date) >= 7;
+    });
+  }
+  function renderFoldSummaries() {
+    const active = data.bets.filter(isActive);
+    const bs = document.getElementById('bets-sum');
+    bs.innerHTML = '';
+    bs.appendChild(document.createTextNode(active.length ? active.length + ' active' : 'none active'));
+    const quiet = quietBets();
+    if (quiet.length) {
+      bs.appendChild(document.createTextNode(' · '));
+      bs.appendChild(el('span', 'warn', quiet.length + ' quiet 7+ days'));
+    }
+    const r = rangeBounds('week');
+    const wk = liveLog().filter(l => inRange(l.date, r));
+    const days = new Set(wk.map(e => new Date(e.date).toDateString()));
+    document.getElementById('review-sum').textContent =
+      'This week · ' + plural(wk.length, 'note', 'notes') + ' · ' + countWorkdays(days, r.from) + '/5 days';
+  }
+
+  document.getElementById('settings-slot').appendChild((() => {
+    const k = kebabMenu([
+      ['Export activity log (.csv)', () => document.getElementById('export-activity-btn').click()],
+      ['Export versions table (.csv)', () => document.getElementById('export-versions-btn').click()],
+      ['Change sync ID…', () => document.getElementById('change-sync-id').click()],
+    ]);
+    const b = k.querySelector('.kebab');
+    b.textContent = '⚙';
+    b.title = 'Settings';
+    b.classList.add('gear');
+    return k;
+  })());
 
   function renderBets() {
     const betsList = document.getElementById('bets-list');
@@ -1149,7 +1252,8 @@
 
     const today = new Date();
     const lastWeek = weekStart(today);
-    let first = addDays(lastWeek, -7 * 25);                 // at least 26 weeks
+    const fit = Math.floor(((box.clientWidth || 360) - 40) / 16);   // weeks that fit without scrolling
+    let first = addDays(lastWeek, -7 * (Math.max(26, fit) - 1));
     if (entries.length) {
       const earliest = weekStart(entries.reduce((a, b) => new Date(a.date) < new Date(b.date) ? a : b).date);
       if (earliest < first) first = earliest;
@@ -1236,7 +1340,10 @@
 
     // Start scrolled to the newest week; afterwards keep the user's position.
     requestAnimationFrame(() => {
-      if (!heatScrolledToEnd || keepLeft === null) { scroll.scrollLeft = scroll.scrollWidth; heatScrolledToEnd = true; }
+      if (!heatScrolledToEnd || keepLeft === null) {
+        scroll.scrollLeft = scroll.scrollWidth;
+        if (scroll.clientWidth) heatScrolledToEnd = true;   // only once actually visible
+      }
       else scroll.scrollLeft = keepLeft;
     });
   }
@@ -1739,6 +1846,7 @@
 
   // ---------- add bet / add entry ----------
   document.getElementById('add-bet-btn').addEventListener('click', () => {
+    openFold('bets');
     document.getElementById('add-bet-form').style.display = 'block';
     document.getElementById('bet-name').focus();
   });
