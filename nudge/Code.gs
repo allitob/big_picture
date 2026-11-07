@@ -56,7 +56,11 @@ function runNudge_(force) {
   var latest = log.reduce(function (a, b) {
     return new Date(a.date) > new Date(b.date) ? a : b;
   });
-  var daysSince = Math.floor((Date.now() - new Date(latest.date).getTime()) / 86400000);
+  // Weekends don't count: no emails on Sat/Sun, and the threshold is 2 workdays
+  // (a Friday entry first triggers a nudge on Tuesday).
+  var today = new Date();
+  if (!force && isWeekend_(today)) return;
+  var daysSince = workdaysBetween_(new Date(latest.date), today);
 
   if (!force && daysSince < 2) return;
 
@@ -67,10 +71,26 @@ function runNudge_(force) {
   var to = props.getProperty('NOTIFY_EMAIL') || Session.getEffectiveUser().getEmail();
   GmailApp.sendEmail(
     to,
-    'Big Picture: ' + daysSince + ' day' + (daysSince === 1 ? '' : 's') + ' since your last entry',
-    "It's been " + daysSince + ' day' + (daysSince === 1 ? '' : 's') + " since you last logged anything.\n\nQuick check-in: " + appUrl
+    'Big Picture: ' + daysSince + ' workday' + (daysSince === 1 ? '' : 's') + ' since your last entry',
+    "It's been " + daysSince + ' workday' + (daysSince === 1 ? '' : 's') + " since you last logged anything.\n\nQuick check-in: " + appUrl
   );
   if (!force) props.setProperty('LAST_NUDGED_LOG_DATE', latest.date);
+}
+
+var TZ_ = 'Atlantic/Reykjavik';
+function dayOfWeek_(d) { return Number(Utilities.formatDate(d, TZ_, 'u')); }   // 1 = Mon … 7 = Sun
+function isWeekend_(d) { return dayOfWeek_(d) >= 6; }
+function dayKey_(d) { return Utilities.formatDate(d, TZ_, 'yyyy-MM-dd'); }
+
+// Weekdays after the day of `from`, up to and including the day of `to`.
+function workdaysBetween_(from, to) {
+  var n = 0, d = new Date(from.getTime()), end = dayKey_(to);
+  for (var i = 0; i < 400; i++) {
+    d = new Date(d.getTime() + 86400000);
+    if (dayKey_(d) > end) break;
+    if (!isWeekend_(d)) n++;
+  }
+  return n;
 }
 
 function getAccessToken_(props) {
