@@ -306,7 +306,9 @@
   .story-row .nm { flex: 1; font-weight: 600; }
   .story-row .meta { font-size: 12px; color: var(--text-muted); }
   .story-open { background: var(--surface); border-radius: 0 0 10px 10px; padding: 0 12px 10px; margin: -8px 0 8px; }
-  .draft-ta { font-size: 14px; line-height: 1.55; min-height: 240px; }
+  /* The draft editor scrolls inside itself, so its size never depends on the sheet's scrollbar. */
+  .draft-ta { font-size: 14px; line-height: 1.55; height: calc(80vh - 170px); min-height: 200px; overflow-y: auto; margin-bottom: 0; }
+  .sheet-body { scrollbar-gutter: stable; }
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; cursor: zoom-out; }
   .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
 </style>
@@ -427,7 +429,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '3.2';
+  const APP_VERSION = '3.3';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -2227,11 +2229,17 @@
   }
 
   function autosize(t) {
-    if (!t.offsetParent) return;      // hidden; sized when shown
+    if (!t.offsetParent || t.classList.contains('draft-ta')) return;      // hidden (sized when shown) / fixed-size editor
     t.style.height = 'auto';
     t.style.height = (t.scrollHeight + 2) + 'px';
   }
   document.addEventListener('input', (e) => { if (e.target.tagName === 'TEXTAREA') autosize(e.target); });
+  // Re-measure after the window (and so the text width) changes, so no lines end up hidden.
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => document.querySelectorAll('textarea').forEach(autosize), 150);
+  });
 
   function scrollToLog() {
     document.getElementById('filter-bet').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2608,7 +2616,6 @@
     sheet.appendChild(head); sheet.appendChild(body); sheet.appendChild(foot);
     back.appendChild(sheet);
     document.body.appendChild(back);
-    requestAnimationFrame(() => autosize(ta));
     let usedModel = cur ? cur.model : null;
 
     const draft = async () => {
