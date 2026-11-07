@@ -79,7 +79,7 @@
     color: var(--text);
     margin-bottom: 8px;
   }
-  textarea { min-height: 70px; resize: vertical; }
+  textarea { min-height: 70px; resize: none; overflow: hidden; }
   .card {
     background: var(--surface);
     border-radius: 12px;
@@ -164,11 +164,29 @@
   .week-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
   .week-head:first-child { margin-top: 12px; }
   .copied { font-size: 12px; color: var(--done-text); margin-left: 8px; }
+
+  /* v2.1: header, bet chips, attachments */
+  .title-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 1.5rem; }
+  .title-row h1 { margin: 0; }
+  .version { font-size: 12px; color: var(--text-muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .chip { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); }
+  .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
+  .chip-hint { font-size: 12px; color: var(--text-muted); align-self: center; }
+  .composer.dragging textarea { border-color: var(--accent); border-style: dashed; }
+  .att-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+  .att { position: relative; width: 60px; height: 60px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--bg); cursor: pointer; padding: 0; flex: none; }
+  .att img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .att .x { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.65); color: #fff; font-size: 13px; line-height: 20px; text-align: center; }
+  .att .ph { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 11px; color: var(--text-muted); }
+  .compose-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; cursor: zoom-out; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Big picture</h1>
+  <div class="title-row"><h1>Big picture</h1><span id="version" class="version"></span></div>
   <div id="status" class="status">Connecting…</div>
 
   <form id="setup" class="form-card" style="display:none;" autocomplete="on">
@@ -200,11 +218,8 @@
 
     <div class="section divider">
       <h2 style="margin-bottom:0.75rem;">Log today</h2>
-      <select id="log-bet-select">
-        <option value="">No specific bet / general note</option>
-      </select>
-      <textarea id="log-text" placeholder="What did you actually spend attention on today?"></textarea>
-      <button id="save-log-btn">Add entry</button>
+      <div id="log-bet-chips" class="chips"></div>
+      <div id="log-composer" class="composer"></div>
     </div>
 
     <div class="section divider">
@@ -259,6 +274,11 @@
   };
   // ------------------------------------------
 
+  // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
+  // refreshed from GitHub's last commit to index.html when reachable.
+  const APP_VERSION = '2.1';
+  const APP_UPDATED = '2026-11-07';
+
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
@@ -267,9 +287,14 @@
   //   bet:   { id, name, why, created, history[{v,date,name,why}],
   //            status: 'active'|'done'|'dropped', closed, outcome,
   //            statusLog[{date, status, outcome}] }
-  //   entry: { id, text, betId, date, history[{v,date,text}], deleted }
+  //   entry: { id, text, betIds[], betId (= betIds[0], for v1 readers), date,
+  //            history[{v,date,text}], deleted, attachments[{id, w, h}] }
+  //   images: separate docs bigpicture/<syncId>__img_<id> and __thm_<id>
+  //           ({ data: dataURL, w, h, created }) so the main doc stays far below
+  //           Firestore's 1 MB limit. Same collection, so the existing rules apply.
   let data = { bets: [], log: [] };
   let docRef = null;
+  let syncId = null;
   let authReady = false;
 
   // UI state
@@ -333,6 +358,7 @@
   }
 
   async function connect(docId) {
+    syncId = docId;
     docRef = doc(db, "bigpicture", docId);
     statusEl.style.display = 'block';
     statusEl.textContent = 'Connecting…';
@@ -408,7 +434,10 @@
   function betStatus(bet) { return bet.status || 'active'; }
   function isActive(bet) { return betStatus(bet) === 'active'; }
   function liveLog() { return data.log.filter(l => !l.deleted); }
-  function entriesFor(betId) { return liveLog().filter(l => l.betId === betId); }
+  function entryBetIds(e) { return e.betIds || (e.betId ? [e.betId] : []); }
+  function entryBets(e) { return entryBetIds(e).map(id => data.bets.find(b => b.id === id)).filter(Boolean); }
+  function setEntryBets(e, ids) { e.betIds = ids; e.betId = ids[0] || null; }
+  function entriesFor(betId) { return liveLog().filter(l => entryBetIds(l).includes(betId)); }
 
   // Which version of a bet was current as of a given date (used to flag log
   // entries logged against a bet that has since been edited).
@@ -534,6 +563,7 @@
     renderLogSelect();
     renderReview();
     renderLog();
+    requestAnimationFrame(() => document.querySelectorAll('#app textarea').forEach(autosize));
   }
 
   function renderNudge() {
@@ -777,10 +807,30 @@
     if (select.value !== selected) select.value = (extra && extra[0]) ? extra[0][0] : '';
   }
 
+  // Toggleable bet chips. Shows active bets, plus any closed bet already in `selected`.
+  function renderBetChips(container, selected) {
+    container.innerHTML = '';
+    const bets = data.bets.filter(b => isActive(b) || selected.has(b.id));
+    bets.forEach(b => {
+      const c = el('button', 'chip' + (selected.has(b.id) ? ' on' : ''), b.name);
+      c.type = 'button';
+      c.title = b.name;
+      c.addEventListener('click', () => {
+        if (selected.has(b.id)) selected.delete(b.id); else selected.add(b.id);
+        c.classList.toggle('on', selected.has(b.id));
+        hint.style.display = selected.size ? 'none' : '';
+      });
+      container.appendChild(c);
+    });
+    const hint = el('span', 'chip-hint', bets.length ? 'None = general note' : 'General note (no active bets)');
+    hint.style.display = selected.size ? 'none' : '';
+    container.appendChild(hint);
+  }
+
+  const composeBets = new Set();
   function renderLogSelect() {
-    const sel = document.getElementById('log-bet-select');
-    const current = sel.value;
-    betOptions(sel, { includeClosed: false, selected: current, extra: [['', 'No specific bet / general note']] });
+    [...composeBets].forEach(id => { const b = data.bets.find(x => x.id === id); if (!b || !isActive(b)) composeBets.delete(id); });
+    renderBetChips(document.getElementById('log-bet-chips'), composeBets);
   }
 
   // ---------- review ----------
@@ -828,7 +878,10 @@
 
     // Attention split
     const counts = new Map();
-    entries.forEach(e => counts.set(e.betId || '', (counts.get(e.betId || '') || 0) + 1));
+    entries.forEach(e => {
+      const ids = entryBets(e).map(b => b.id);
+      (ids.length ? ids : ['']).forEach(id => counts.set(id, (counts.get(id) || 0) + 1));
+    });
     const rows = [...counts.entries()].map(([id, n]) => {
       const bet = data.bets.find(b => b.id === id);
       return { id, n, name: bet ? bet.name : 'General notes', general: !bet };
@@ -889,7 +942,6 @@
   function buildReviewText() {
     const r = rangeBounds(reviewRange);
     const entries = liveLog().filter(l => inRange(l.date, r)).sort((a, b) => new Date(a.date) - new Date(b.date));
-    const nameOf = id => { const b = data.bets.find(x => x.id === id); return b ? b.name : null; };
     const L = [];
     L.push('# Big picture review — ' + r.label);
     L.push('');
@@ -897,7 +949,7 @@
     const active = data.bets.filter(isActive);
     if (!active.length) L.push('(none)');
     active.forEach(b => {
-      const n = entries.filter(e => e.betId === b.id).length;
+      const n = entries.filter(e => entryBetIds(e).includes(b.id)).length;
       const lt = lastTouch(b.id);
       L.push('- **' + b.name + '** — started ' + fmtDate(b.created || b.history[0].date) +
         '; ' + n + (n === 1 ? ' entry' : ' entries') + ' in period' + (lt ? '; last touched ' + fmtDate(lt) : '; never logged'));
@@ -909,7 +961,7 @@
       L.push('## Closed in this period');
       closed.forEach(b => {
         L.push('- **' + b.name + '** — ' + betStatus(b) + ' ' + fmtDate(b.closed) +
-          ', ran ' + weeksBetween(b.created || b.history[0].date, b.closed) + ' wk, ' + entriesFor(b.id).length + ' entries total');
+          ', ran ' + weeksBetween(b.created || b.history[0].date, b.closed) + ' wk, ' + plural(entriesFor(b.id).length, 'entry', 'entries') + ' total');
         if (b.outcome) L.push('  Outcome: ' + b.outcome.replace(/\n+/g, ' '));
       });
     }
@@ -919,8 +971,9 @@
     entries.forEach(e => {
       const day = fmtDay(e.date);
       if (day !== lastDay) { L.push(''); L.push('### ' + day); lastDay = day; }
-      const bn = nameOf(e.betId);
-      L.push('- ' + (bn ? '[' + bn + '] ' : '') + e.text.replace(/\n+/g, ' / '));
+      const bn = entryBets(e).map(b => b.name).join(' + ');
+      const na = (e.attachments || []).length;
+      L.push('- ' + (bn ? '[' + bn + '] ' : '') + (e.text || '').replace(/\n+/g, ' / ') + (na ? ' (' + plural(na, 'image', 'images') + ' attached)' : ''));
     });
     if (!entries.length) L.push('(none)');
     return L.join('\n');
@@ -948,8 +1001,8 @@
 
     const q = filterText.toLowerCase();
     const filtered = liveLog()
-      .filter(e => filterBet === 'all' || (filterBet === 'general' ? !data.bets.some(b => b.id === e.betId) : e.betId === filterBet))
-      .filter(e => !q || e.text.toLowerCase().includes(q))
+      .filter(e => filterBet === 'all' || (filterBet === 'general' ? !entryBets(e).length : entryBetIds(e).includes(filterBet)))
+      .filter(e => !q || (e.text || '').toLowerCase().includes(q))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
 
     const logList = document.getElementById('log-list');
@@ -987,51 +1040,72 @@
 
   function renderLogEntry(entry) {
     ensureHistory(entry, ['text']);
-    const bet = data.bets.find(b => b.id === entry.betId);
+    const bets = entryBets(entry);
     const wrapper = el('div', 'log-entry');
 
     if (editingLogId === entry.id) {
-      const betSel = el('select');
-      betOptions(betSel, { includeClosed: true, selected: entry.betId || '', extra: [['', 'No specific bet / general note']] });
-      const textInput = el('textarea');
-      textInput.value = entry.text;
-      const btnRow = el('div', 'btn-row');
+      const sel = new Set(bets.map(b => b.id));
+      const chips = el('div', 'chips');
+      renderBetChips(chips, sel);
+      const comp = makeComposer({ text: entry.text || '', atts: entry.attachments || [] });
       const saveBtn = el('button', '', 'Save');
       const cancelBtn = el('button', '', 'Cancel');
-      btnRow.appendChild(saveBtn);
-      btnRow.appendChild(cancelBtn);
-      wrapper.appendChild(betSel);
-      wrapper.appendChild(textInput);
-      wrapper.appendChild(btnRow);
+      comp.bar.prepend(cancelBtn);
+      comp.bar.prepend(saveBtn);
+      wrapper.appendChild(chips);
+      wrapper.appendChild(comp.root);
 
       saveBtn.addEventListener('click', async () => {
-        const newText = textInput.value.trim();
-        if (!newText) return;
-        if (newText !== entry.text) {
-          entry.history.push({ v: entry.history.length + 1, date: new Date().toISOString(), text: newText });
+        const newText = comp.ta.value.trim();
+        if (!newText && !comp.state.atts.length) return;
+        if (comp.isBusy()) { alert('Still processing images — try again in a second.'); return; }
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+        try {
+          const attachments = await comp.commit();
+          if (newText !== (entry.text || '')) {
+            entry.history.push({ v: entry.history.length + 1, date: new Date().toISOString(), text: newText });
+          }
+          entry.text = newText;
+          setEntryBets(entry, [...sel]);
+          if (attachments.length) entry.attachments = attachments; else delete entry.attachments;
+          editingLogId = null;
+          render();
+          await save();
+        } catch (e) {
+          console.error(e);
+          alert('Saving images failed: ' + e.message);
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save';
         }
-        entry.text = newText;
-        entry.betId = betSel.value || null;
-        editingLogId = null;
-        render();
-        await save();
       });
       cancelBtn.addEventListener('click', () => { editingLogId = null; render(); });
       return wrapper;
     }
 
-    const dateP = el('p', 'log-date', fmtDay(entry.date) + (bet ? ' · ' + bet.name : ''));
-    if (bet && !isActive(bet)) dateP.appendChild(el('span', 'pill ' + betStatus(bet), betStatus(bet) === 'done' ? 'Done' : 'Dropped'));
+    const dateP = el('p', 'log-date', fmtDay(entry.date));
+    bets.forEach((b, i) => {
+      dateP.appendChild(document.createTextNode((i === 0 ? ' · ' : ' + ') + b.name));
+      if (!isActive(b)) dateP.appendChild(el('span', 'pill ' + betStatus(b), betStatus(b) === 'done' ? 'Done' : 'Dropped'));
+    });
     wrapper.appendChild(dateP);
-    appendExpandableText(wrapper, entry.id, entry.text, LOG_LIMIT, 'log-text');
+    if (entry.text) appendExpandableText(wrapper, entry.id, entry.text, LOG_LIMIT, 'log-text');
+    if (entry.attachments && entry.attachments.length) {
+      const row = el('div', 'att-row');
+      entry.attachments.forEach(a => row.appendChild(attThumb(a, {})));
+      wrapper.appendChild(row);
+    }
 
-    if (bet) {
+    bets.forEach(bet => {
+      ensureHistory(bet, ['name', 'why']);
       const versionAtLog = betVersionAtDate(bet, entry.date);
       const currentVersion = bet.history.length;
       if (versionAtLog !== currentVersion) {
-        wrapper.appendChild(el('span', 'stale-flag', 'Bet has changed since this entry (was v' + versionAtLog + ', now v' + currentVersion + ')'));
+        const who = bets.length > 1 ? '"' + bet.name + '"' : 'Bet';
+        wrapper.appendChild(el('span', 'stale-flag', who + ' has changed since this entry (was v' + versionAtLog + ', now v' + currentVersion + ')'));
+        wrapper.appendChild(document.createTextNode(' '));
       }
-    }
+    });
 
     const actions = el('div', 'card-actions');
     actions.appendChild(linkBtn('Edit', () => { editingLogId = entry.id; render(); }));
@@ -1052,11 +1126,220 @@
 
     if (expandedLogHistory === entry.id) {
       appendHistoryPanel(wrapper, entry.history, 'log-' + entry.id, (content, h) => {
-        appendExpandableText(content, 'histv-log-' + entry.id + '-v' + h.v, h.text, LOG_LIMIT, 'log-text');
+        appendExpandableText(content, 'histv-log-' + entry.id + '-v' + h.v, h.text || '', LOG_LIMIT, 'log-text');
       });
     }
     return wrapper;
   }
+
+  // ---------- images ----------
+  // Pictures are downscaled in the browser and stored as JPEG data URLs in their
+  // own Firestore docs (full + thumbnail), never in the main document.
+  const FULL_MAX = 1600;
+  const FULL_BUDGET = 700000;   // data-URL chars, well under the 1 MB doc limit
+  const THUMB_MAX = 240;
+  const thumbCache = new Map();
+  const fullCache = new Map();
+  const imgDoc = (kind, id) => doc(db, 'bigpicture', syncId + '__' + kind + '_' + id);
+
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => resolve({ img, url });
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('this image format isn\'t supported by the browser')); };
+      img.src = url;
+    });
+  }
+  function drawScaled(img, maxDim, quality) {
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';            // flatten transparent PNGs/screenshots
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    return { data: c.toDataURL('image/jpeg', quality), w, h };
+  }
+  async function processImage(file) {
+    const { img, url } = await loadImage(file);
+    try {
+      let dim = FULL_MAX, q = 0.82;
+      let full = drawScaled(img, dim, q);
+      while (full.data.length > FULL_BUDGET && dim > 500) {
+        dim = Math.round(dim * 0.8);
+        q = Math.max(0.6, q - 0.05);
+        full = drawScaled(img, dim, q);
+      }
+      const thumb = drawScaled(img, THUMB_MAX, 0.7).data;
+      const id = 'img_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      return { id, full: full.data, thumb, w: full.w, h: full.h, pending: true };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  async function uploadAtt(a) {
+    const created = new Date().toISOString();
+    await setDoc(imgDoc('img', a.id), { data: a.full, w: a.w, h: a.h, created });
+    await setDoc(imgDoc('thm', a.id), { data: a.thumb, created });
+  }
+  function cachedGet(cache, kind, id) {
+    if (!cache.has(id)) {
+      cache.set(id, getDoc(imgDoc(kind, id))
+        .then(snap => snap.exists() ? snap.data().data : null)
+        .catch(e => { console.error('image load failed', e); cache.delete(id); return null; }));
+    }
+    return cache.get(id);
+  }
+  const loadThumb = id => cachedGet(thumbCache, 'thm', id);
+  const loadFull = id => cachedGet(fullCache, 'img', id);
+
+  // A small clickable thumbnail. `att` is either a stored {id,w,h} or a pending
+  // processed image (with .thumb/.full data URLs) not yet uploaded.
+  function attThumb(att, { onRemove }) {
+    const b = el('button', 'att');
+    b.type = 'button';
+    b.title = 'Open picture';
+    const img = el('img');
+    img.alt = '';
+    if (att.pending) {
+      img.src = att.thumb;
+      b.appendChild(img);
+    } else {
+      const ph = el('span', 'ph', '…');
+      b.appendChild(ph);
+      loadThumb(att.id).then(src => {
+        if (src) { img.src = src; ph.replaceWith(img); } else { ph.textContent = 'missing'; }
+      });
+    }
+    b.addEventListener('click', () => {
+      openLightbox(img.src || null, att.pending ? Promise.resolve(att.full) : loadFull(att.id));
+    });
+    if (onRemove) {
+      const x = el('span', 'x', '×');
+      x.title = 'Remove';
+      x.addEventListener('click', (e) => { e.stopPropagation(); onRemove(); });
+      b.appendChild(x);
+    }
+    return b;
+  }
+
+  function openLightbox(previewSrc, fullPromise) {
+    const box = el('div', 'lightbox');
+    const img = el('img');
+    img.alt = '';
+    if (previewSrc) img.src = previewSrc;
+    box.appendChild(img);
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+    box.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(box);
+    fullPromise.then(src => { if (src) img.src = src; });
+  }
+
+  // Text box + attachments: paste, drag-and-drop or the Attach button add pictures.
+  function makeComposer({ text = '', atts = [], placeholder = '' }) {
+    const root = el('div', 'composer');
+    const ta = el('textarea');
+    ta.value = text;
+    ta.placeholder = placeholder;
+    const row = el('div', 'att-row');
+    const bar = el('div', 'compose-bar');
+    const file = el('input');
+    file.type = 'file';
+    file.accept = 'image/*';
+    file.multiple = true;
+    file.style.display = 'none';
+    const attachBtn = el('button', 'small', '📎 Attach');
+    attachBtn.type = 'button';
+    attachBtn.addEventListener('click', () => file.click());
+    bar.appendChild(attachBtn);
+    bar.appendChild(file);
+
+    const state = { atts: [...atts], busy: 0 };
+    function drawAtts() {
+      row.innerHTML = '';
+      state.atts.forEach(a => row.appendChild(attThumb(a, {
+        onRemove: () => { state.atts = state.atts.filter(x => x !== a); drawAtts(); }
+      })));
+      for (let i = 0; i < state.busy; i++) {
+        const ph = el('div', 'att');
+        ph.appendChild(el('span', 'ph', 'Adding…'));
+        row.appendChild(ph);
+      }
+      row.style.display = row.childNodes.length ? '' : 'none';
+    }
+    async function addFiles(files) {
+      const imgs = [...files].filter(f => f && f.type && f.type.startsWith('image/'));
+      if (!imgs.length) return;
+      state.busy += imgs.length;
+      drawAtts();
+      for (const f of imgs) {
+        try {
+          state.atts.push(await processImage(f));
+        } catch (e) {
+          alert('Couldn\'t add ' + (f.name || 'picture') + ': ' + e.message);
+        } finally {
+          state.busy--;
+          drawAtts();
+        }
+      }
+    }
+
+    ta.addEventListener('paste', (e) => {
+      const items = [...((e.clipboardData && e.clipboardData.items) || [])];
+      const files = items.filter(i => i.kind === 'file' && i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean);
+      if (!files.length) return;
+      if (!e.clipboardData.getData('text/plain')) e.preventDefault();
+      addFiles(files);
+    });
+    root.addEventListener('dragover', (e) => {
+      if (![...e.dataTransfer.types].includes('Files')) return;
+      e.preventDefault();
+      root.classList.add('dragging');
+    });
+    root.addEventListener('dragleave', (e) => { if (!root.contains(e.relatedTarget)) root.classList.remove('dragging'); });
+    root.addEventListener('drop', (e) => {
+      if (!e.dataTransfer.files.length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      root.classList.remove('dragging');
+      addFiles(e.dataTransfer.files);
+    });
+    file.addEventListener('change', () => { addFiles(file.files); file.value = ''; });
+
+    root.appendChild(ta);
+    root.appendChild(row);
+    root.appendChild(bar);
+    drawAtts();
+    requestAnimationFrame(() => autosize(ta));
+
+    return {
+      root, ta, bar, state, addFiles,
+      isBusy: () => state.busy > 0,
+      // Uploads pending pictures; returns the attachment list to store on the entry.
+      async commit() {
+        for (const a of state.atts.filter(x => x.pending)) {
+          await uploadAtt(a);
+          thumbCache.set(a.id, Promise.resolve(a.thumb));
+          fullCache.set(a.id, Promise.resolve(a.full));
+          a.pending = false;
+        }
+        return state.atts.map(a => ({ id: a.id, w: a.w, h: a.h }));
+      },
+      reset() { ta.value = ''; state.atts = []; drawAtts(); autosize(ta); },
+    };
+  }
+
+  function autosize(t) {
+    if (!t.offsetParent) return;      // hidden; sized when shown
+    t.style.height = 'auto';
+    t.style.height = (t.scrollHeight + 2) + 'px';
+  }
+  document.addEventListener('input', (e) => { if (e.target.tagName === 'TEXTAREA') autosize(e.target); });
 
   function scrollToLog() {
     document.getElementById('filter-bet').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1099,16 +1382,57 @@
     render();
     await save();
   });
-  document.getElementById('save-log-btn').addEventListener('click', async () => {
-    const text = document.getElementById('log-text').value.trim();
-    const betId = document.getElementById('log-bet-select').value || null;
-    if (!text) return;
-    const date = new Date().toISOString();
-    data.log.push({ id: 'log_' + Date.now(), text, betId, date, history: [{ v: 1, date, text }] });
-    document.getElementById('log-text').value = '';
-    render();
-    await save();
+
+  const logComposer = makeComposer({ placeholder: 'What did you actually spend attention on today? (Paste or drop pictures here)' });
+  logComposer.ta.id = 'log-text';
+  const addEntryBtn = el('button', '', 'Add entry');
+  addEntryBtn.id = 'save-log-btn';
+  logComposer.bar.prepend(addEntryBtn);
+  document.getElementById('log-composer').appendChild(logComposer.root);
+
+  addEntryBtn.addEventListener('click', async () => {
+    const text = logComposer.ta.value.trim();
+    if (!text && !logComposer.state.atts.length) return;
+    if (logComposer.isBusy()) { alert('Still processing images — try again in a second.'); return; }
+    addEntryBtn.disabled = true;
+    addEntryBtn.textContent = 'Saving…';
+    try {
+      const attachments = await logComposer.commit();
+      const date = new Date().toISOString();
+      const entry = { id: 'log_' + Date.now(), text, date, history: [{ v: 1, date, text }] };
+      setEntryBets(entry, [...composeBets]);
+      if (attachments.length) entry.attachments = attachments;
+      data.log.push(entry);
+      logComposer.reset();
+      render();
+      await save();
+    } catch (e) {
+      console.error(e);
+      alert('Saving images failed: ' + e.message);
+    } finally {
+      addEntryBtn.disabled = false;
+      addEntryBtn.textContent = 'Add entry';
+    }
   });
+
+  // A picture dropped anywhere else on the page goes to the "Log today" box
+  // instead of the browser navigating away to the image.
+  window.addEventListener('dragover', (e) => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+  window.addEventListener('drop', (e) => {
+    if (!e.dataTransfer.files.length) return;
+    e.preventDefault();
+    if (appEl.style.display !== 'none') logComposer.addFiles(e.dataTransfer.files);
+  });
+
+  // ---------- version tag ----------
+  function showVersion(dateStr) {
+    document.getElementById('version').textContent = 'v' + APP_VERSION + ' · updated ' + fmtDate(dateStr);
+  }
+  showVersion(APP_UPDATED + 'T12:00:00');
+  fetch('https://api.github.com/repos/allitob/big_picture/commits?path=index.html&per_page=1')
+    .then(r => r.ok ? r.json() : null)
+    .then(j => { const d = j && j[0] && j[0].commit && j[0].commit.committer.date; if (d) showVersion(d); })
+    .catch(() => {});
 
   // ---------- export ----------
   function csvEscape(v) {
@@ -1155,17 +1479,17 @@
     });
     data.log.forEach(entry => {
       ensureHistory(entry, ['text']);
-      const bet = data.bets.find(b => b.id === entry.betId);
+      const betNames = entryBets(entry).map(b => b.name).join(' + ');
       entry.history.forEach(h => {
         rows.push({
           date: h.date, type: 'log', action: h.v === 1 ? 'created' : 'edited',
-          item_id: entry.id, version: h.v, bet_name: bet ? bet.name : '', name: '', why: '', text: h.text, status: '', outcome: ''
+          item_id: entry.id, version: h.v, bet_name: betNames, name: '', why: '', text: h.text, status: '', outcome: ''
         });
       });
       if (entry.deleted) {
         rows.push({
           date: entry.deleted, type: 'log', action: 'deleted',
-          item_id: entry.id, version: '', bet_name: bet ? bet.name : '', name: '', why: '', text: entry.text, status: '', outcome: ''
+          item_id: entry.id, version: '', bet_name: betNames, name: '', why: '', text: entry.text, status: '', outcome: ''
         });
       }
     });
@@ -1183,19 +1507,20 @@
         rows.push({
           item_type: 'bet', item_id: bet.id, version: h.v, is_current: h.v === currentV ? 'yes' : 'no',
           date: h.date, name: h.name, why: h.why || '', text: '', bet_id: '', bet_name: '',
-          status: betStatus(bet), closed: bet.closed || '', outcome: bet.outcome || '', deleted: ''
+          status: betStatus(bet), closed: bet.closed || '', outcome: bet.outcome || '', deleted: '', attachments: ''
         });
       });
     });
     data.log.forEach(entry => {
       ensureHistory(entry, ['text']);
-      const bet = data.bets.find(b => b.id === entry.betId);
+      const betNames = entryBets(entry).map(b => b.name).join(' + ');
+      const nAtt = (entry.attachments || []).length;
       const currentV = entry.history.length;
       entry.history.forEach(h => {
         rows.push({
           item_type: 'log', item_id: entry.id, version: h.v, is_current: h.v === currentV ? 'yes' : 'no',
-          date: h.date, name: '', why: '', text: h.text, bet_id: entry.betId || '', bet_name: bet ? bet.name : '',
-          status: '', closed: '', outcome: '', deleted: entry.deleted || ''
+          date: h.date, name: '', why: '', text: h.text, bet_id: entryBetIds(entry).join(';'), bet_name: betNames,
+          status: '', closed: '', outcome: '', deleted: entry.deleted || '', attachments: nAtt
         });
       });
     });
@@ -1213,7 +1538,7 @@
   });
 
   document.getElementById('export-versions-btn').addEventListener('click', () => {
-    const headers = ['item_type', 'item_id', 'version', 'is_current', 'date', 'name', 'why', 'text', 'bet_id', 'bet_name', 'status', 'closed', 'outcome', 'deleted'];
+    const headers = ['item_type', 'item_id', 'version', 'is_current', 'date', 'name', 'why', 'text', 'bet_id', 'bet_name', 'status', 'closed', 'outcome', 'deleted', 'attachments'];
     downloadFile('big-picture-versions.csv', toCsv(buildVersionsRows(), headers), 'text/csv;charset=utf-8;');
   });
 </script>
