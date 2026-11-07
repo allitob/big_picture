@@ -35,7 +35,8 @@ function checkInactivity(force) {
 
   var doc = JSON.parse(res.getContentText());
   var data = decodeFields_(doc.fields || {});
-  var log = data.log || [];
+  // Soft-deleted entries (v2) don't count as activity.
+  var log = (data.log || []).filter(function (l) { return !l.deleted; });
   if (!log.length) return;
 
   var latest = log.reduce(function (a, b) {

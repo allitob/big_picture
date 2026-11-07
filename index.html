@@ -22,6 +22,9 @@
     --warning-text: #854f0b;
     --danger-text: #a32d2d;
     --accent: #185fa5;
+    --accent-soft: #dde9f5;
+    --done-text: #2f6b2a;
+    --done-bg: #e3efdf;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -35,6 +38,9 @@
       --warning-text: #fac775;
       --danger-text: #f09595;
       --accent: #85b7eb;
+      --accent-soft: #23384d;
+      --done-text: #a8d69f;
+      --done-bg: #24361f;
     }
   }
   * { box-sizing: border-box; }
@@ -49,7 +55,7 @@
   h1 { font-size: 20px; font-weight: 600; margin: 0 0 1.5rem; }
   h2 { font-size: 16px; font-weight: 600; margin: 0; }
   .section { margin-bottom: 2rem; }
-  .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 0.75rem; }
   button {
     font-family: inherit;
     font-size: 14px;
@@ -61,6 +67,7 @@
     cursor: pointer;
   }
   button:active { opacity: 0.7; }
+  button.small { font-size: 13px; padding: 5px 10px; }
   input, textarea, select {
     width: 100%;
     font-family: inherit;
@@ -86,8 +93,9 @@
     gap: 12px;
   }
   .card p { margin: 0; }
-  .card-actions { display: flex; gap: 12px; margin-top: 6px; }
+  .card-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
   .link-btn { font-size: 12px; color: var(--accent); text-decoration: none; cursor: pointer; background: none; border: none; padding: 0; }
+  .link-btn.danger { color: var(--danger-text); }
   .history-panel { margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); }
   .history-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 4px 0; cursor: pointer; }
   .history-content { padding: 0 0 8px; border-top: 1px dashed var(--border); margin-top: -2px; }
@@ -97,16 +105,17 @@
   .bet-why { font-size: 13px; color: var(--text-secondary); white-space: pre-wrap; }
   .badge { font-size: 12px; white-space: nowrap; color: var(--text-muted); }
   .muted { color: var(--text-muted); font-size: 14px; }
+  .small-muted { color: var(--text-muted); font-size: 12px; }
   .log-entry { border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px; }
   .log-date { font-size: 12px; color: var(--text-muted); margin: 0 0 2px !important; }
-  .log-text { font-size: 14px; white-space: pre-wrap; }
+  .log-text { font-size: 14px; white-space: pre-wrap; margin: 0; }
   .form-card {
     background: var(--surface);
     border-radius: 12px;
     padding: 1rem;
     margin-bottom: 1.5rem;
   }
-  .btn-row { display: flex; gap: 8px; }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
   .nudge {
     background: var(--warning-bg);
     color: var(--warning-text);
@@ -118,6 +127,43 @@
   }
   .divider { border-top: 1px solid var(--border); padding-top: 1.5rem; }
   .status { font-size: 13px; color: var(--text-muted); text-align: center; padding: 2rem 0; }
+
+  /* v2: lifecycle */
+  .pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 6px; vertical-align: 1px; margin-left: 6px; }
+  .pill.done { color: var(--done-text); background: var(--done-bg); }
+  .pill.dropped { color: var(--text-secondary); background: var(--border); }
+  .closed-card { background: transparent; border: 1px solid var(--border); }
+  .outcome { font-size: 13px; white-space: pre-wrap; margin-top: 4px !important; }
+  .outcome-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-top: 8px !important; }
+  .close-form { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  .seg button { border: none; border-radius: 0; background: var(--surface); padding: 6px 12px; font-size: 13px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--accent); color: var(--bg); }
+  .toggle-head { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+
+  /* v2: review */
+  .review-card { background: var(--surface); border-radius: 12px; padding: 1rem; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .stat { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+  .stat .n { font-size: 20px; font-weight: 600; line-height: 1.2; }
+  .stat .l { font-size: 11px; color: var(--text-muted); }
+  .dots { display: flex; gap: 4px; margin-top: 4px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border); }
+  .dot.on { background: var(--accent); }
+  .bar-row { display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .bar-label { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { height: 6px; border-radius: 3px; background: var(--bg); margin-top: 2px; }
+  .bar-fill { height: 6px; border-radius: 3px; background: var(--accent); }
+  .bar-n { font-size: 12px; color: var(--text-muted); text-align: right; }
+  .untouched { font-size: 13px; color: var(--warning-text); margin-top: 8px !important; }
+
+  /* v2: log */
+  .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .filters select, .filters input { margin-bottom: 0; font-size: 14px; padding: 8px 10px; }
+  .week-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .week-head:first-child { margin-top: 12px; }
+  .copied { font-size: 12px; color: var(--done-text); margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -140,16 +186,16 @@
         <h2>Bets</h2>
         <button id="add-bet-btn">+ Add bet</button>
       </div>
-      <div id="bets-list"></div>
-    </div>
-
-    <div id="add-bet-form" class="form-card" style="display:none;">
-      <input id="bet-name" placeholder="Name (e.g. Payload gantry)" />
-      <textarea id="bet-why" placeholder="Why it matters, in a sentence"></textarea>
-      <div class="btn-row">
-        <button id="save-bet-btn">Save bet</button>
-        <button id="cancel-bet-btn">Cancel</button>
+      <div id="add-bet-form" class="form-card" style="display:none;">
+        <input id="bet-name" placeholder="Name (e.g. Payload gantry)" />
+        <textarea id="bet-why" placeholder="Why it matters, in a sentence"></textarea>
+        <div class="btn-row">
+          <button id="save-bet-btn">Save bet</button>
+          <button id="cancel-bet-btn">Cancel</button>
+        </div>
       </div>
+      <div id="bets-list"></div>
+      <div id="closed-bets"></div>
     </div>
 
     <div class="section divider">
@@ -162,8 +208,27 @@
     </div>
 
     <div class="section divider">
-      <h2 style="margin-bottom:0.75rem;">Recent log</h2>
+      <div class="row">
+        <h2>Review</h2>
+        <div>
+          <span id="copied-flag" class="copied" style="display:none;">Copied</span>
+          <button id="copy-review-btn" class="small">Copy for review</button>
+        </div>
+      </div>
+      <div class="seg" id="review-range"></div>
+      <div id="review"></div>
+    </div>
+
+    <div class="section divider">
+      <h2 style="margin-bottom:0.75rem;">Log</h2>
+      <div class="filters">
+        <select id="filter-bet"></select>
+        <input id="filter-text" type="search" placeholder="Search" autocapitalize="off" />
+      </div>
       <div id="log-list"></div>
+      <div id="log-more" style="text-align:center; display:none;">
+        <button id="log-more-btn" class="small">Show older</button>
+      </div>
     </div>
 
     <div class="section divider">
@@ -198,16 +263,39 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
 
+  // Data model (all v2 fields optional, so v1 documents load unchanged):
+  //   bet:   { id, name, why, created, history[{v,date,name,why}],
+  //            status: 'active'|'done'|'dropped', closed, outcome,
+  //            statusLog[{date, status, outcome}] }
+  //   entry: { id, text, betId, date, history[{v,date,text}], deleted }
   let data = { bets: [], log: [] };
   let docRef = null;
   let authReady = false;
+
+  // UI state
   let editingBetId = null;
+  let closingBetId = null;
+  let closingStatus = 'done';
   let expandedBetHistory = null;
   let editingLogId = null;
   let expandedLogHistory = null;
+  let expandedVersionKey = null;
   let expandedTexts = new Set();
+  let showClosed = false;
+  let reviewRange = 'week';
+  let logLimit = 20;
+  let filterBet = 'all';
+  let filterText = '';
+
   const WHY_LIMIT = 160;
   const LOG_LIMIT = 240;
+  const LOG_PAGE = 20;
+  const RANGES = [
+    { key: 'week', label: 'This week' },
+    { key: 'last', label: 'Last week' },
+    { key: '4w', label: '4 weeks' },
+    { key: 'all', label: 'All' },
+  ];
 
   const statusEl = document.getElementById('status');
   const appEl = document.getElementById('app');
@@ -270,22 +358,57 @@
     setupInput.focus();
   });
 
+  // ---------- dates ----------
   function fmtDate(d) {
     return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  function fmtDay(d) {
+    return new Date(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   }
   function daysSince(d) {
     return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
   }
+  // Monday 00:00 local of the week containing d.
+  function weekStart(d) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+    return x;
+  }
+  function addDays(d, n) {
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+  }
+  function isoWeek(d) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    x.setDate(x.getDate() + 3 - ((x.getDay() + 6) % 7));
+    const jan4 = new Date(x.getFullYear(), 0, 4);
+    return 1 + Math.round(((x - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+  }
+  function weekLabel(start) {
+    const end = addDays(start, 6);
+    return 'Week ' + isoWeek(start) + ' · ' + fmtDate(start) + '–' + fmtDate(end);
+  }
+  function weeksBetween(a, b) {
+    return Math.max(1, Math.round((new Date(b) - new Date(a)) / (7 * 86400000)));
+  }
 
+  // ---------- model helpers ----------
   // Lazily synthesizes a v1 history entry for items saved before versioning existed.
   function ensureHistory(item, fields) {
     if (!item.history || !item.history.length) {
-      const first = { v: 1, date: item.created || new Date().toISOString() };
+      const first = { v: 1, date: item.created || item.date || new Date().toISOString() };
       fields.forEach(f => { first[f] = item[f]; });
       item.history = [first];
     }
     return item.history;
   }
+  function betStatus(bet) { return bet.status || 'active'; }
+  function isActive(bet) { return betStatus(bet) === 'active'; }
+  function liveLog() { return data.log.filter(l => !l.deleted); }
+  function entriesFor(betId) { return liveLog().filter(l => l.betId === betId); }
 
   // Which version of a bet was current as of a given date (used to flag log
   // entries logged against a bet that has since been edited).
@@ -298,64 +421,72 @@
     return v;
   }
 
-  let expandedVersionKey = null;
+  function lastTouch(betId) {
+    const entries = entriesFor(betId);
+    if (!entries.length) return null;
+    return entries.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b).date;
+  }
+
+  function rangeBounds(key) {
+    const ws = weekStart(new Date());
+    if (key === 'week') return { from: ws, to: addDays(ws, 7), label: weekLabel(ws) };
+    if (key === 'last') { const s = addDays(ws, -7); return { from: s, to: ws, label: weekLabel(s) }; }
+    if (key === '4w') { const s = addDays(ws, -21); return { from: s, to: addDays(ws, 7), label: fmtDate(s) + '–' + fmtDate(addDays(ws, 6)) }; }
+    return { from: new Date(0), to: new Date(8.64e15), label: 'All time' };
+  }
+  function inRange(dateStr, r) {
+    const t = new Date(dateStr);
+    return t >= r.from && t < r.to;
+  }
+
+  // ---------- shared renderers ----------
+  function el(tag, className, text) {
+    const e = document.createElement(tag);
+    if (className) e.className = className;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function linkBtn(text, onClick, extraClass) {
+    const a = el('a', 'link-btn' + (extraClass ? ' ' + extraClass : ''), text);
+    a.href = '#';
+    a.addEventListener('click', (e) => { e.preventDefault(); onClick(); });
+    return a;
+  }
 
   // Renders text with a "Show more…" / "Show less" toggle when it exceeds
   // `limit`. `key` must be unique among everything sharing expandedTexts.
   function appendExpandableText(container, key, fullText, limit, className) {
-    const p = document.createElement('p');
-    p.className = className;
+    const p = el('p', className);
     const isLong = fullText.length > limit;
     const isExpanded = expandedTexts.has(key);
-
     if (isLong && !isExpanded) {
       p.textContent = fullText.slice(0, limit).trimEnd() + '… ';
-      const more = document.createElement('a');
-      more.href = '#';
-      more.className = 'link-btn';
-      more.textContent = 'Show more…';
-      more.addEventListener('click', (e) => {
-        e.preventDefault();
-        expandedTexts.add(key);
-        render();
-      });
-      p.appendChild(more);
+      p.appendChild(linkBtn('Show more…', () => { expandedTexts.add(key); render(); }));
     } else {
       p.textContent = fullText;
       if (isLong) {
         p.appendChild(document.createTextNode(' '));
-        const less = document.createElement('a');
-        less.href = '#';
-        less.className = 'link-btn';
-        less.textContent = 'Show less';
-        less.addEventListener('click', (e) => {
-          e.preventDefault();
-          expandedTexts.delete(key);
-          render();
-        });
-        p.appendChild(less);
+        p.appendChild(linkBtn('Show less', () => { expandedTexts.delete(key); render(); }));
       }
     }
     container.appendChild(p);
   }
 
   function appendHistoryPanel(container, history, keyPrefix, renderContent) {
-    const panel = document.createElement('div');
-    panel.className = 'history-panel';
+    const panel = el('div', 'history-panel');
     [...history].reverse().forEach(h => {
       const key = keyPrefix + '-v' + h.v;
-      const rowWrap = document.createElement('div');
-      const row = document.createElement('div');
-      row.className = 'history-row';
-      row.innerHTML = '<span>v' + h.v + '</span><span>' + fmtDate(h.date) + '</span>';
+      const rowWrap = el('div');
+      const row = el('div', 'history-row');
+      row.appendChild(el('span', '', 'v' + h.v));
+      row.appendChild(el('span', '', fmtDate(h.date)));
       row.addEventListener('click', () => {
         expandedVersionKey = expandedVersionKey === key ? null : key;
         render();
       });
       rowWrap.appendChild(row);
       if (expandedVersionKey === key) {
-        const content = document.createElement('div');
-        content.className = 'history-content';
+        const content = el('div', 'history-content');
         renderContent(content, h);
         rowWrap.appendChild(content);
       }
@@ -364,6 +495,16 @@
     container.appendChild(panel);
   }
 
+  function betHistoryPanel(wrapper, bet) {
+    appendHistoryPanel(wrapper, bet.history, 'bet-' + bet.id, (content, h) => {
+      const nameP = el('p', 'bet-name', h.name);
+      nameP.style.fontSize = '13px';
+      content.appendChild(nameP);
+      appendExpandableText(content, 'histv-bet-' + bet.id + '-v' + h.v, h.why || '', WHY_LIMIT, 'bet-why');
+    });
+  }
+
+  // ---------- persistence ----------
   async function load() {
     try {
       const snap = await getDoc(docRef);
@@ -371,6 +512,8 @@
     } catch (e) {
       console.error('load failed', e);
     }
+    data.bets = data.bets || [];
+    data.log = data.log || [];
     render();
   }
 
@@ -383,16 +526,21 @@
     }
   }
 
-  function lastTouch(betId) {
-    const entries = data.log.filter(l => l.betId === betId);
-    if (!entries.length) return null;
-    return entries.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b).date;
+  // ---------- render ----------
+  function render() {
+    renderNudge();
+    renderBets();
+    renderClosedBets();
+    renderLogSelect();
+    renderReview();
+    renderLog();
   }
 
   function renderNudge() {
     const nudge = document.getElementById('nudge');
-    if (!data.log.length) { nudge.style.display = 'none'; return; }
-    const lastEntry = [...data.log].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    const log = liveLog();
+    if (!log.length) { nudge.style.display = 'none'; return; }
+    const lastEntry = [...log].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
     const ds = daysSince(lastEntry.date);
     if (ds >= 2) {
       nudge.style.display = 'block';
@@ -402,235 +550,537 @@
     }
   }
 
-  function render() {
-    renderNudge();
-
+  function renderBets() {
     const betsList = document.getElementById('bets-list');
     betsList.innerHTML = '';
-    if (!data.bets.length) {
-      betsList.innerHTML = '<p class="muted">No bets yet. Add the big things you are actually investing in.</p>';
+    const active = data.bets.filter(isActive);
+    if (!active.length) {
+      betsList.appendChild(el('p', 'muted', data.bets.length
+        ? 'No active bets. Add the next big thing you are investing in.'
+        : 'No bets yet. Add the big things you are actually investing in.'));
     }
-    data.bets.forEach(bet => {
+    active.forEach(bet => {
       ensureHistory(bet, ['name', 'why']);
-      const wrapper = document.createElement('div');
-      wrapper.className = 'card';
+      const wrapper = el('div', 'card');
 
       if (editingBetId === bet.id) {
-        const nameInput = document.createElement('input');
-        nameInput.value = bet.name;
-        nameInput.placeholder = 'Name';
-        const whyInput = document.createElement('textarea');
-        whyInput.value = bet.why || '';
-        whyInput.placeholder = 'Why it matters';
-        const btnRow = document.createElement('div');
-        btnRow.className = 'btn-row';
-        const saveBtn = document.createElement('button');
-        saveBtn.textContent = 'Save';
-        const cancelBtn = document.createElement('button');
-        cancelBtn.textContent = 'Cancel';
-        btnRow.appendChild(saveBtn);
-        btnRow.appendChild(cancelBtn);
-        wrapper.appendChild(nameInput);
-        wrapper.appendChild(whyInput);
-        wrapper.appendChild(btnRow);
-
-        saveBtn.addEventListener('click', async () => {
-          const newName = nameInput.value.trim();
-          const newWhy = whyInput.value.trim();
-          if (!newName) return;
-          const changed = newName !== bet.name || newWhy !== (bet.why || '');
-          bet.name = newName;
-          bet.why = newWhy;
-          if (changed) {
-            bet.history.push({ v: bet.history.length + 1, date: new Date().toISOString(), name: newName, why: newWhy });
-          }
-          editingBetId = null;
-          render();
-          await save();
-        });
-        cancelBtn.addEventListener('click', () => {
-          editingBetId = null;
-          render();
-        });
-      } else {
-        const lt = lastTouch(bet.id);
-        const ds = lt ? daysSince(lt) : null;
-        let badgeText = 'Not logged yet';
-        let badgeColor = 'var(--text-muted)';
-        if (ds !== null) {
-          badgeText = ds === 0 ? 'Touched today' : ds === 1 ? 'Touched yesterday' : 'Touched ' + ds + ' days ago';
-          if (ds >= 14) badgeColor = 'var(--danger-text)';
-          else if (ds >= 7) badgeColor = 'var(--warning-text)';
-          else badgeColor = 'var(--text-secondary)';
-        }
-        const row = document.createElement('div');
-        row.className = 'card-row';
-        const leftDiv = document.createElement('div');
-        leftDiv.style.minWidth = '0';
-        const nameP = document.createElement('p');
-        nameP.className = 'bet-name';
-        nameP.textContent = bet.name;
-        leftDiv.appendChild(nameP);
-        appendExpandableText(leftDiv, bet.id, bet.why || '', WHY_LIMIT, 'bet-why');
-        row.appendChild(leftDiv);
-        const badgeSpan = document.createElement('span');
-        badgeSpan.className = 'badge';
-        badgeSpan.style.color = badgeColor;
-        badgeSpan.textContent = badgeText;
-        row.appendChild(badgeSpan);
-        wrapper.appendChild(row);
-
-        const actions = document.createElement('div');
-        actions.className = 'card-actions';
-        const editLink = document.createElement('a');
-        editLink.href = '#';
-        editLink.className = 'link-btn';
-        editLink.textContent = 'Edit';
-        editLink.addEventListener('click', (e) => {
-          e.preventDefault();
-          editingBetId = bet.id;
-          render();
-        });
-        actions.appendChild(editLink);
-
-        if (bet.history.length > 1) {
-          const historyLink = document.createElement('a');
-          historyLink.href = '#';
-          historyLink.className = 'link-btn';
-          historyLink.textContent = (expandedBetHistory === bet.id ? 'Hide history' : 'History (v' + bet.history.length + ')');
-          historyLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            expandedBetHistory = expandedBetHistory === bet.id ? null : bet.id;
-            render();
-          });
-          actions.appendChild(historyLink);
-        }
-        wrapper.appendChild(actions);
-
-        if (expandedBetHistory === bet.id) {
-          appendHistoryPanel(wrapper, bet.history, 'bet-' + bet.id, (content, h) => {
-            const nameP = document.createElement('p');
-            nameP.className = 'bet-name';
-            nameP.style.fontSize = '13px';
-            nameP.textContent = h.name;
-            content.appendChild(nameP);
-            appendExpandableText(content, 'histv-bet-' + bet.id + '-v' + h.v, h.why || '', WHY_LIMIT, 'bet-why');
-          });
-        }
+        renderBetEditor(wrapper, bet);
+        betsList.appendChild(wrapper);
+        return;
       }
+
+      const lt = lastTouch(bet.id);
+      const ds = lt ? daysSince(lt) : null;
+      let badgeText = 'Not logged yet';
+      let badgeColor = 'var(--text-muted)';
+      if (ds !== null) {
+        badgeText = ds === 0 ? 'Touched today' : ds === 1 ? 'Touched yesterday' : 'Touched ' + ds + ' days ago';
+        if (ds >= 14) badgeColor = 'var(--danger-text)';
+        else if (ds >= 7) badgeColor = 'var(--warning-text)';
+        else badgeColor = 'var(--text-secondary)';
+      }
+      const row = el('div', 'card-row');
+      const leftDiv = el('div');
+      leftDiv.style.minWidth = '0';
+      leftDiv.appendChild(el('p', 'bet-name', bet.name));
+      appendExpandableText(leftDiv, bet.id, bet.why || '', WHY_LIMIT, 'bet-why');
+      row.appendChild(leftDiv);
+      const badge = el('span', 'badge', badgeText);
+      badge.style.color = badgeColor;
+      row.appendChild(badge);
+      wrapper.appendChild(row);
+
+      const n = entriesFor(bet.id).length;
+      const actions = el('div', 'card-actions');
+      actions.appendChild(linkBtn('Edit', () => { editingBetId = bet.id; render(); }));
+      if (n) actions.appendChild(linkBtn('Log (' + n + ')', () => { filterBet = bet.id; logLimit = LOG_PAGE; render(); scrollToLog(); }));
+      if (bet.history.length > 1) {
+        actions.appendChild(linkBtn(expandedBetHistory === bet.id ? 'Hide history' : 'History (v' + bet.history.length + ')', () => {
+          expandedBetHistory = expandedBetHistory === bet.id ? null : bet.id;
+          render();
+        }));
+      }
+      actions.appendChild(linkBtn(closingBetId === bet.id ? 'Cancel close' : 'Close bet', () => {
+        closingBetId = closingBetId === bet.id ? null : bet.id;
+        closingStatus = 'done';
+        render();
+      }));
+      wrapper.appendChild(actions);
+
+      if (expandedBetHistory === bet.id) betHistoryPanel(wrapper, bet);
+      if (closingBetId === bet.id) renderCloseForm(wrapper, bet);
 
       betsList.appendChild(wrapper);
     });
+  }
 
-    const sel = document.getElementById('log-bet-select');
-    sel.innerHTML = '<option value="">No specific bet / general note</option>';
-    data.bets.forEach(bet => {
-      const opt = document.createElement('option');
-      opt.value = bet.id;
-      opt.textContent = bet.name;
-      sel.appendChild(opt);
+  function renderBetEditor(wrapper, bet) {
+    const nameInput = el('input');
+    nameInput.value = bet.name;
+    nameInput.placeholder = 'Name';
+    const whyInput = el('textarea');
+    whyInput.value = bet.why || '';
+    whyInput.placeholder = 'Why it matters';
+    const btnRow = el('div', 'btn-row');
+    const saveBtn = el('button', '', 'Save');
+    const cancelBtn = el('button', '', 'Cancel');
+    btnRow.appendChild(saveBtn);
+    btnRow.appendChild(cancelBtn);
+    wrapper.appendChild(nameInput);
+    wrapper.appendChild(whyInput);
+    wrapper.appendChild(btnRow);
+
+    saveBtn.addEventListener('click', async () => {
+      const newName = nameInput.value.trim();
+      const newWhy = whyInput.value.trim();
+      if (!newName) return;
+      const changed = newName !== bet.name || newWhy !== (bet.why || '');
+      bet.name = newName;
+      bet.why = newWhy;
+      if (changed) {
+        bet.history.push({ v: bet.history.length + 1, date: new Date().toISOString(), name: newName, why: newWhy });
+      }
+      editingBetId = null;
+      render();
+      await save();
     });
+    cancelBtn.addEventListener('click', () => { editingBetId = null; render(); });
+  }
 
-    const logList = document.getElementById('log-list');
-    logList.innerHTML = '';
-    const recent = [...data.log].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 15);
-    if (!recent.length) {
-      logList.innerHTML = '<p class="muted">No entries yet.</p>';
-    }
-    recent.forEach(entry => {
-      ensureHistory(entry, ['text']);
-      const bet = data.bets.find(b => b.id === entry.betId);
-      const wrapper = document.createElement('div');
-      wrapper.className = 'log-entry';
+  function renderCloseForm(wrapper, bet) {
+    const form = el('div', 'close-form');
+    const seg = el('div', 'seg');
+    [['done', 'Done'], ['dropped', 'Dropped']].forEach(([key, label]) => {
+      const b = el('button', closingStatus === key ? 'on' : '', label);
+      b.addEventListener('click', () => {
+        closingStatus = key;
+        form.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === b));
+        outcome.placeholder = key === 'done'
+          ? 'Outcome — what shipped, what changed, what you learned'
+          : 'Why you dropped it — what you learned';
+      });
+      seg.appendChild(b);
+    });
+    const outcome = el('textarea');
+    outcome.placeholder = closingStatus === 'done'
+      ? 'Outcome — what shipped, what changed, what you learned'
+      : 'Why you dropped it — what you learned';
+    const confirmBtn = el('button', '', 'Close bet');
+    confirmBtn.addEventListener('click', async () => {
+      const now = new Date().toISOString();
+      const text = outcome.value.trim();
+      bet.status = closingStatus;
+      bet.closed = now;
+      bet.outcome = text;
+      bet.statusLog = bet.statusLog || [];
+      bet.statusLog.push({ date: now, status: closingStatus, outcome: text });
+      closingBetId = null;
+      render();
+      await save();
+    });
+    form.appendChild(seg);
+    form.appendChild(outcome);
+    form.appendChild(confirmBtn);
+    wrapper.appendChild(form);
+    setTimeout(() => outcome.focus(), 0);
+  }
 
-      if (editingLogId === entry.id) {
-        const textInput = document.createElement('textarea');
-        textInput.value = entry.text;
-        const btnRow = document.createElement('div');
-        btnRow.className = 'btn-row';
-        const saveBtn = document.createElement('button');
-        saveBtn.textContent = 'Save';
-        const cancelBtn = document.createElement('button');
-        cancelBtn.textContent = 'Cancel';
-        btnRow.appendChild(saveBtn);
-        btnRow.appendChild(cancelBtn);
-        wrapper.appendChild(textInput);
-        wrapper.appendChild(btnRow);
+  function renderClosedBets() {
+    const box = document.getElementById('closed-bets');
+    box.innerHTML = '';
+    const closed = data.bets.filter(b => !isActive(b))
+      .sort((a, b) => new Date(b.closed || 0) - new Date(a.closed || 0));
+    if (!closed.length) return;
 
-        saveBtn.addEventListener('click', async () => {
-          const newText = textInput.value.trim();
-          if (!newText) return;
-          const changed = newText !== entry.text;
-          entry.text = newText;
-          if (changed) {
-            entry.history.push({ v: entry.history.length + 1, date: new Date().toISOString(), text: newText });
-          }
-          editingLogId = null;
-          render();
-          await save();
-        });
-        cancelBtn.addEventListener('click', () => {
-          editingLogId = null;
-          render();
-        });
-      } else {
-        const dateP = document.createElement('p');
-        dateP.className = 'log-date';
-        dateP.textContent = fmtDate(entry.date) + (bet ? ' · ' + bet.name : '');
-        wrapper.appendChild(dateP);
-        appendExpandableText(wrapper, entry.id, entry.text, LOG_LIMIT, 'log-text');
+    const head = el('div', 'toggle-head');
+    head.style.margin = '14px 0 8px';
+    head.appendChild(el('span', 'muted', 'Closed bets (' + closed.length + ')'));
+    head.appendChild(el('span', 'link-btn', showClosed ? 'Hide' : 'Show'));
+    head.addEventListener('click', () => { showClosed = !showClosed; render(); });
+    box.appendChild(head);
+    if (!showClosed) return;
 
-        if (bet) {
-          const versionAtLog = betVersionAtDate(bet, entry.date);
-          const currentVersion = bet.history.length;
-          if (versionAtLog !== currentVersion) {
-            const flag = document.createElement('span');
-            flag.className = 'stale-flag';
-            flag.textContent = 'Bet has changed since this entry (was v' + versionAtLog + ', now v' + currentVersion + ')';
-            wrapper.appendChild(flag);
-          }
-        }
+    closed.forEach(bet => {
+      ensureHistory(bet, ['name', 'why']);
+      const st = betStatus(bet);
+      const wrapper = el('div', 'card closed-card');
+      const nameP = el('p', 'bet-name', bet.name);
+      nameP.appendChild(el('span', 'pill ' + st, st === 'done' ? 'Done' : 'Dropped'));
+      wrapper.appendChild(nameP);
 
-        const actions = document.createElement('div');
-        actions.className = 'card-actions';
-        const editLink = document.createElement('a');
-        editLink.href = '#';
-        editLink.className = 'link-btn';
-        editLink.textContent = 'Edit';
-        editLink.addEventListener('click', (e) => {
-          e.preventDefault();
-          editingLogId = entry.id;
-          render();
-        });
-        actions.appendChild(editLink);
-
-        if (entry.history.length > 1) {
-          const historyLink = document.createElement('a');
-          historyLink.href = '#';
-          historyLink.className = 'link-btn';
-          historyLink.textContent = (expandedLogHistory === entry.id ? 'Hide history' : 'History (v' + entry.history.length + ')');
-          historyLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            expandedLogHistory = expandedLogHistory === entry.id ? null : entry.id;
-            render();
-          });
-          actions.appendChild(historyLink);
-        }
-        wrapper.appendChild(actions);
-
-        if (expandedLogHistory === entry.id) {
-          appendHistoryPanel(wrapper, entry.history, 'log-' + entry.id, (content, h) => {
-            appendExpandableText(content, 'histv-log-' + entry.id + '-v' + h.v, h.text, LOG_LIMIT, 'log-text');
-          });
-        }
+      const n = entriesFor(bet.id).length;
+      const start = bet.created || bet.history[0].date;
+      const meta = 'Closed ' + fmtDate(bet.closed) + ' · ran ' + weeksBetween(start, bet.closed) + ' wk · ' + n + (n === 1 ? ' entry' : ' entries');
+      wrapper.appendChild(el('p', 'small-muted', meta));
+      appendExpandableText(wrapper, 'closed-why-' + bet.id, bet.why || '', WHY_LIMIT, 'bet-why');
+      if (bet.outcome) {
+        wrapper.appendChild(el('p', 'outcome-label', 'Outcome'));
+        appendExpandableText(wrapper, 'outcome-' + bet.id, bet.outcome, WHY_LIMIT, 'outcome');
       }
 
-      logList.appendChild(wrapper);
+      const actions = el('div', 'card-actions');
+      if (n) actions.appendChild(linkBtn('Log (' + n + ')', () => { filterBet = bet.id; logLimit = LOG_PAGE; render(); scrollToLog(); }));
+      if (bet.history.length > 1) {
+        actions.appendChild(linkBtn(expandedBetHistory === bet.id ? 'Hide history' : 'History (v' + bet.history.length + ')', () => {
+          expandedBetHistory = expandedBetHistory === bet.id ? null : bet.id;
+          render();
+        }));
+      }
+      actions.appendChild(linkBtn('Reopen', async () => {
+        const now = new Date().toISOString();
+        bet.status = 'active';
+        bet.statusLog = bet.statusLog || [];
+        bet.statusLog.push({ date: now, status: 'active', outcome: '' });
+        delete bet.closed;
+        // outcome is kept in statusLog; clear the live field so a re-close starts fresh
+        bet.outcome = '';
+        render();
+        await save();
+      }));
+      wrapper.appendChild(actions);
+      if (expandedBetHistory === bet.id) betHistoryPanel(wrapper, bet);
+      box.appendChild(wrapper);
     });
   }
 
+  function betOptions(select, { includeClosed, selected, extra }) {
+    select.innerHTML = '';
+    (extra || []).forEach(([v, label]) => {
+      const o = el('option', '', label);
+      o.value = v;
+      select.appendChild(o);
+    });
+    const active = data.bets.filter(isActive);
+    const closed = data.bets.filter(b => !isActive(b));
+    const addGroup = (label, bets) => {
+      if (!bets.length) return;
+      const g = document.createElement('optgroup');
+      g.label = label;
+      bets.forEach(b => {
+        const o = el('option', '', b.name);
+        o.value = b.id;
+        g.appendChild(o);
+      });
+      select.appendChild(g);
+    };
+    if (includeClosed) {
+      addGroup('Active', active);
+      addGroup('Closed', closed);
+    } else {
+      active.forEach(b => {
+        const o = el('option', '', b.name);
+        o.value = b.id;
+        select.appendChild(o);
+      });
+    }
+    select.value = selected;
+    if (select.value !== selected) select.value = (extra && extra[0]) ? extra[0][0] : '';
+  }
+
+  function renderLogSelect() {
+    const sel = document.getElementById('log-bet-select');
+    const current = sel.value;
+    betOptions(sel, { includeClosed: false, selected: current, extra: [['', 'No specific bet / general note']] });
+  }
+
+  // ---------- review ----------
+  function renderReview() {
+    const seg = document.getElementById('review-range');
+    seg.innerHTML = '';
+    RANGES.forEach(r => {
+      const b = el('button', reviewRange === r.key ? 'on' : '', r.label);
+      b.addEventListener('click', () => { reviewRange = r.key; render(); });
+      seg.appendChild(b);
+    });
+
+    const box = document.getElementById('review');
+    box.innerHTML = '';
+    const r = rangeBounds(reviewRange);
+    const entries = liveLog().filter(l => inRange(l.date, r));
+    const card = el('div', 'review-card');
+    card.appendChild(el('p', 'small-muted', r.label));
+    card.lastChild.style.margin = '0 0 10px';
+
+    // Stats
+    const stats = el('div', 'stats');
+    const stat = (n, l) => {
+      const s = el('div', 'stat');
+      s.appendChild(el('div', 'n', String(n)));
+      s.appendChild(el('div', 'l', l));
+      stats.appendChild(s);
+      return s;
+    };
+    stat(entries.length, entries.length === 1 ? 'entry' : 'entries');
+    const days = new Set(entries.map(e => new Date(e.date).toDateString()));
+    if (reviewRange === 'week' || reviewRange === 'last') {
+      const s = stat(countWorkdays(days, r.from) + '/5', 'workdays logged');
+      const dots = el('div', 'dots');
+      for (let i = 0; i < 5; i++) {
+        dots.appendChild(el('span', 'dot' + (days.has(addDays(r.from, i).toDateString()) ? ' on' : '')));
+      }
+      s.appendChild(dots);
+    } else {
+      stat(days.size, days.size === 1 ? 'day logged' : 'days logged');
+    }
+    const closedInRange = data.bets.filter(b => !isActive(b) && b.closed && inRange(b.closed, r));
+    stat(closedInRange.length, closedInRange.length === 1 ? 'bet closed' : 'bets closed');
+    card.appendChild(stats);
+
+    // Attention split
+    const counts = new Map();
+    entries.forEach(e => counts.set(e.betId || '', (counts.get(e.betId || '') || 0) + 1));
+    const rows = [...counts.entries()].map(([id, n]) => {
+      const bet = data.bets.find(b => b.id === id);
+      return { id, n, name: bet ? bet.name : 'General notes', general: !bet };
+    }).sort((a, b) => (a.general - b.general) || (b.n - a.n));
+    const max = Math.max(1, ...rows.map(x => x.n));
+    if (rows.length) {
+      card.appendChild(el('p', 'outcome-label', 'Where attention went'));
+      card.lastChild.style.margin = '0 0 6px';
+      rows.forEach(x => {
+        const row = el('div', 'bar-row');
+        const left = el('div');
+        left.appendChild(el('div', 'bar-label', x.name));
+        const track = el('div', 'bar-track');
+        const fill = el('div', 'bar-fill');
+        fill.style.width = (100 * x.n / max) + '%';
+        if (x.general) fill.style.background = 'var(--text-muted)';
+        track.appendChild(fill);
+        left.appendChild(track);
+        row.appendChild(left);
+        row.appendChild(el('div', 'bar-n', String(x.n)));
+        card.appendChild(row);
+      });
+    } else {
+      card.appendChild(el('p', 'muted', 'Nothing logged in this period.'));
+    }
+
+    // Active bets that got no attention in this period
+    if (reviewRange !== 'all') {
+      const quiet = data.bets.filter(b => isActive(b) && !counts.has(b.id)
+        && new Date(b.created || b.history[0].date) < r.to);
+      if (quiet.length) {
+        card.appendChild(el('p', 'untouched', 'No entries: ' + quiet.map(b => b.name).join(', ')));
+      }
+    }
+
+    if (closedInRange.length) {
+      card.appendChild(el('p', 'outcome-label', 'Closed'));
+      closedInRange.forEach(b => {
+        const p = el('p', 'bet-why', '');
+        p.appendChild(el('strong', '', b.name));
+        p.appendChild(el('span', 'pill ' + betStatus(b), betStatus(b) === 'done' ? 'Done' : 'Dropped'));
+        if (b.outcome) p.appendChild(document.createTextNode(' — ' + b.outcome));
+        card.appendChild(p);
+      });
+    }
+    box.appendChild(card);
+  }
+
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+  function countWorkdays(daySet, monday) {
+    let n = 0;
+    for (let i = 0; i < 5; i++) if (daySet.has(addDays(monday, i).toDateString())) n++;
+    return n;
+  }
+
+  // Plain-text summary of the selected range, for pasting into a chat with an LLM.
+  function buildReviewText() {
+    const r = rangeBounds(reviewRange);
+    const entries = liveLog().filter(l => inRange(l.date, r)).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const nameOf = id => { const b = data.bets.find(x => x.id === id); return b ? b.name : null; };
+    const L = [];
+    L.push('# Big picture review — ' + r.label);
+    L.push('');
+    L.push('## Active bets');
+    const active = data.bets.filter(isActive);
+    if (!active.length) L.push('(none)');
+    active.forEach(b => {
+      const n = entries.filter(e => e.betId === b.id).length;
+      const lt = lastTouch(b.id);
+      L.push('- **' + b.name + '** — started ' + fmtDate(b.created || b.history[0].date) +
+        '; ' + n + (n === 1 ? ' entry' : ' entries') + ' in period' + (lt ? '; last touched ' + fmtDate(lt) : '; never logged'));
+      if (b.why) L.push('  Why: ' + b.why.replace(/\n+/g, ' '));
+    });
+    const closed = data.bets.filter(b => !isActive(b) && b.closed && inRange(b.closed, r));
+    if (closed.length) {
+      L.push('');
+      L.push('## Closed in this period');
+      closed.forEach(b => {
+        L.push('- **' + b.name + '** — ' + betStatus(b) + ' ' + fmtDate(b.closed) +
+          ', ran ' + weeksBetween(b.created || b.history[0].date, b.closed) + ' wk, ' + entriesFor(b.id).length + ' entries total');
+        if (b.outcome) L.push('  Outcome: ' + b.outcome.replace(/\n+/g, ' '));
+      });
+    }
+    L.push('');
+    L.push('## Log (' + plural(entries.length, 'entry', 'entries') + ')');
+    let lastDay = '';
+    entries.forEach(e => {
+      const day = fmtDay(e.date);
+      if (day !== lastDay) { L.push(''); L.push('### ' + day); lastDay = day; }
+      const bn = nameOf(e.betId);
+      L.push('- ' + (bn ? '[' + bn + '] ' : '') + e.text.replace(/\n+/g, ' / '));
+    });
+    if (!entries.length) L.push('(none)');
+    return L.join('\n');
+  }
+
+  document.getElementById('copy-review-btn').addEventListener('click', async () => {
+    const text = buildReviewText();
+    const flag = document.getElementById('copied-flag');
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      // Clipboard API can be blocked (e.g. some in-app browsers) — fall back to a file.
+      downloadFile('big-picture-review.md', text, 'text/markdown;charset=utf-8;');
+      flag.textContent = 'Downloaded';
+    }
+    flag.style.display = 'inline';
+    setTimeout(() => { flag.style.display = 'none'; flag.textContent = 'Copied'; }, 2000);
+  });
+
+  // ---------- log ----------
+  function renderLog() {
+    const fsel = document.getElementById('filter-bet');
+    betOptions(fsel, { includeClosed: true, selected: filterBet, extra: [['all', 'All entries'], ['general', 'General notes']] });
+    filterBet = fsel.value;
+
+    const q = filterText.toLowerCase();
+    const filtered = liveLog()
+      .filter(e => filterBet === 'all' || (filterBet === 'general' ? !data.bets.some(b => b.id === e.betId) : e.betId === filterBet))
+      .filter(e => !q || e.text.toLowerCase().includes(q))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const logList = document.getElementById('log-list');
+    logList.innerHTML = '';
+    if (!filtered.length) {
+      logList.appendChild(el('p', 'muted', data.log.length ? 'No matching entries.' : 'No entries yet.'));
+      logList.lastChild.style.marginTop = '12px';
+    }
+
+    const shown = filtered.slice(0, logLimit);
+    // Count per week across the whole filtered set, so headers stay right when paging.
+    const weekCounts = new Map();
+    filtered.forEach(e => {
+      const k = weekStart(e.date).getTime();
+      weekCounts.set(k, (weekCounts.get(k) || 0) + 1);
+    });
+    let currentWeek = null;
+    shown.forEach(entry => {
+      const wk = weekStart(entry.date).getTime();
+      if (wk !== currentWeek) {
+        currentWeek = wk;
+        const h = el('div', 'week-head');
+        h.appendChild(el('span', '', weekLabel(new Date(wk))));
+        const n = weekCounts.get(wk);
+        h.appendChild(el('span', '', n + (n === 1 ? ' entry' : ' entries')));
+        logList.appendChild(h);
+      }
+      logList.appendChild(renderLogEntry(entry));
+    });
+
+    const more = document.getElementById('log-more');
+    more.style.display = filtered.length > logLimit ? 'block' : 'none';
+    document.getElementById('log-more-btn').textContent = 'Show older (' + (filtered.length - logLimit) + ' more)';
+  }
+
+  function renderLogEntry(entry) {
+    ensureHistory(entry, ['text']);
+    const bet = data.bets.find(b => b.id === entry.betId);
+    const wrapper = el('div', 'log-entry');
+
+    if (editingLogId === entry.id) {
+      const betSel = el('select');
+      betOptions(betSel, { includeClosed: true, selected: entry.betId || '', extra: [['', 'No specific bet / general note']] });
+      const textInput = el('textarea');
+      textInput.value = entry.text;
+      const btnRow = el('div', 'btn-row');
+      const saveBtn = el('button', '', 'Save');
+      const cancelBtn = el('button', '', 'Cancel');
+      btnRow.appendChild(saveBtn);
+      btnRow.appendChild(cancelBtn);
+      wrapper.appendChild(betSel);
+      wrapper.appendChild(textInput);
+      wrapper.appendChild(btnRow);
+
+      saveBtn.addEventListener('click', async () => {
+        const newText = textInput.value.trim();
+        if (!newText) return;
+        if (newText !== entry.text) {
+          entry.history.push({ v: entry.history.length + 1, date: new Date().toISOString(), text: newText });
+        }
+        entry.text = newText;
+        entry.betId = betSel.value || null;
+        editingLogId = null;
+        render();
+        await save();
+      });
+      cancelBtn.addEventListener('click', () => { editingLogId = null; render(); });
+      return wrapper;
+    }
+
+    const dateP = el('p', 'log-date', fmtDay(entry.date) + (bet ? ' · ' + bet.name : ''));
+    if (bet && !isActive(bet)) dateP.appendChild(el('span', 'pill ' + betStatus(bet), betStatus(bet) === 'done' ? 'Done' : 'Dropped'));
+    wrapper.appendChild(dateP);
+    appendExpandableText(wrapper, entry.id, entry.text, LOG_LIMIT, 'log-text');
+
+    if (bet) {
+      const versionAtLog = betVersionAtDate(bet, entry.date);
+      const currentVersion = bet.history.length;
+      if (versionAtLog !== currentVersion) {
+        wrapper.appendChild(el('span', 'stale-flag', 'Bet has changed since this entry (was v' + versionAtLog + ', now v' + currentVersion + ')'));
+      }
+    }
+
+    const actions = el('div', 'card-actions');
+    actions.appendChild(linkBtn('Edit', () => { editingLogId = entry.id; render(); }));
+    if (entry.history.length > 1) {
+      actions.appendChild(linkBtn(expandedLogHistory === entry.id ? 'Hide history' : 'History (v' + entry.history.length + ')', () => {
+        expandedLogHistory = expandedLogHistory === entry.id ? null : entry.id;
+        render();
+      }));
+    }
+    actions.appendChild(linkBtn('Delete', async () => {
+      if (!confirm('Delete this entry?')) return;
+      // Soft delete: kept in the document (and the activity export) so it can be recovered.
+      entry.deleted = new Date().toISOString();
+      render();
+      await save();
+    }, 'danger'));
+    wrapper.appendChild(actions);
+
+    if (expandedLogHistory === entry.id) {
+      appendHistoryPanel(wrapper, entry.history, 'log-' + entry.id, (content, h) => {
+        appendExpandableText(content, 'histv-log-' + entry.id + '-v' + h.v, h.text, LOG_LIMIT, 'log-text');
+      });
+    }
+    return wrapper;
+  }
+
+  function scrollToLog() {
+    document.getElementById('filter-bet').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  document.getElementById('filter-bet').addEventListener('change', (e) => {
+    filterBet = e.target.value;
+    logLimit = LOG_PAGE;
+    render();
+  });
+  document.getElementById('filter-text').addEventListener('input', (e) => {
+    filterText = e.target.value;
+    logLimit = LOG_PAGE;
+    renderLog();
+  });
+  document.getElementById('log-more-btn').addEventListener('click', () => {
+    logLimit += LOG_PAGE * 2;
+    renderLog();
+  });
+
+  // ---------- add bet / add entry ----------
   document.getElementById('add-bet-btn').addEventListener('click', () => {
     document.getElementById('add-bet-form').style.display = 'block';
+    document.getElementById('bet-name').focus();
   });
   document.getElementById('cancel-bet-btn').addEventListener('click', () => {
     document.getElementById('add-bet-form').style.display = 'none';
@@ -642,7 +1092,7 @@
     const why = document.getElementById('bet-why').value.trim();
     if (!name) return;
     const created = new Date().toISOString();
-    data.bets.push({ id: 'bet_' + Date.now(), name, why, created, history: [{ v: 1, date: created, name, why }] });
+    data.bets.push({ id: 'bet_' + Date.now(), name, why, created, status: 'active', history: [{ v: 1, date: created, name, why }] });
     document.getElementById('bet-name').value = '';
     document.getElementById('bet-why').value = '';
     document.getElementById('add-bet-form').style.display = 'none';
@@ -660,6 +1110,7 @@
     await save();
   });
 
+  // ---------- export ----------
   function csvEscape(v) {
     const s = (v === null || v === undefined) ? '' : String(v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -671,8 +1122,8 @@
     return lines.join('\r\n');
   }
 
-  function downloadCsv(filename, content) {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  function downloadFile(filename, content, type) {
+    const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -683,7 +1134,8 @@
     URL.revokeObjectURL(url);
   }
 
-  // Every version of every bet and log entry, chronological — a full activity trail.
+  // Every version of every bet and log entry, plus status changes and deletions,
+  // chronological — a full activity trail. New columns are appended at the end.
   function buildActivityRows() {
     const rows = [];
     data.bets.forEach(bet => {
@@ -691,7 +1143,13 @@
       bet.history.forEach(h => {
         rows.push({
           date: h.date, type: 'bet', action: h.v === 1 ? 'created' : 'edited',
-          item_id: bet.id, version: h.v, bet_name: '', name: h.name, why: h.why || '', text: ''
+          item_id: bet.id, version: h.v, bet_name: '', name: h.name, why: h.why || '', text: '', status: '', outcome: ''
+        });
+      });
+      (bet.statusLog || []).forEach(s => {
+        rows.push({
+          date: s.date, type: 'bet', action: s.status === 'active' ? 'reopened' : 'closed',
+          item_id: bet.id, version: '', bet_name: '', name: bet.name, why: '', text: '', status: s.status, outcome: s.outcome || ''
         });
       });
     });
@@ -701,9 +1159,15 @@
       entry.history.forEach(h => {
         rows.push({
           date: h.date, type: 'log', action: h.v === 1 ? 'created' : 'edited',
-          item_id: entry.id, version: h.v, bet_name: bet ? bet.name : '', name: '', why: '', text: h.text
+          item_id: entry.id, version: h.v, bet_name: bet ? bet.name : '', name: '', why: '', text: h.text, status: '', outcome: ''
         });
       });
+      if (entry.deleted) {
+        rows.push({
+          date: entry.deleted, type: 'log', action: 'deleted',
+          item_id: entry.id, version: '', bet_name: bet ? bet.name : '', name: '', why: '', text: entry.text, status: '', outcome: ''
+        });
+      }
     });
     rows.sort((a, b) => new Date(a.date) - new Date(b.date));
     return rows;
@@ -718,7 +1182,8 @@
       bet.history.forEach(h => {
         rows.push({
           item_type: 'bet', item_id: bet.id, version: h.v, is_current: h.v === currentV ? 'yes' : 'no',
-          date: h.date, name: h.name, why: h.why || '', text: '', bet_id: '', bet_name: ''
+          date: h.date, name: h.name, why: h.why || '', text: '', bet_id: '', bet_name: '',
+          status: betStatus(bet), closed: bet.closed || '', outcome: bet.outcome || '', deleted: ''
         });
       });
     });
@@ -729,7 +1194,8 @@
       entry.history.forEach(h => {
         rows.push({
           item_type: 'log', item_id: entry.id, version: h.v, is_current: h.v === currentV ? 'yes' : 'no',
-          date: h.date, name: '', why: '', text: h.text, bet_id: entry.betId || '', bet_name: bet ? bet.name : ''
+          date: h.date, name: '', why: '', text: h.text, bet_id: entry.betId || '', bet_name: bet ? bet.name : '',
+          status: '', closed: '', outcome: '', deleted: entry.deleted || ''
         });
       });
     });
@@ -742,13 +1208,13 @@
   }
 
   document.getElementById('export-activity-btn').addEventListener('click', () => {
-    const headers = ['date', 'type', 'action', 'item_id', 'version', 'bet_name', 'name', 'why', 'text'];
-    downloadCsv('big-picture-activity.csv', toCsv(buildActivityRows(), headers));
+    const headers = ['date', 'type', 'action', 'item_id', 'version', 'bet_name', 'name', 'why', 'text', 'status', 'outcome'];
+    downloadFile('big-picture-activity.csv', toCsv(buildActivityRows(), headers), 'text/csv;charset=utf-8;');
   });
 
   document.getElementById('export-versions-btn').addEventListener('click', () => {
-    const headers = ['item_type', 'item_id', 'version', 'is_current', 'date', 'name', 'why', 'text', 'bet_id', 'bet_name'];
-    downloadCsv('big-picture-versions.csv', toCsv(buildVersionsRows(), headers));
+    const headers = ['item_type', 'item_id', 'version', 'is_current', 'date', 'name', 'why', 'text', 'bet_id', 'bet_name', 'status', 'closed', 'outcome', 'deleted'];
+    downloadFile('big-picture-versions.csv', toCsv(buildVersionsRows(), headers), 'text/csv;charset=utf-8;');
   });
 </script>
 </body>
