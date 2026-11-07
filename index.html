@@ -323,6 +323,7 @@
     <p class="muted" style="margin-top:0;">Enter your sync ID to connect this device to your data. (Find it in your other device's settings, or pick a new private string if this is your first device.) Your browser can offer to save this like a password.</p>
     <input id="setup-label" name="username" value="big-picture" autocomplete="username" style="position:absolute; left:-9999px;" tabindex="-1" aria-hidden="true" />
     <input id="setup-doc-id" name="password" type="password" placeholder="Sync ID" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
+    <label class="small-muted" style="display:flex;align-items:center;gap:6px;margin:-2px 0 10px;cursor:pointer;"><input type="checkbox" id="setup-show" style="width:auto;margin:0;"> Show sync ID</label>
     <button type="submit" id="setup-save-btn">Connect</button>
   </form>
 
@@ -426,7 +427,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '3.1';
+  const APP_VERSION = '3.2';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -520,7 +521,21 @@
     docRef = doc(db, "bigpicture", docId);
     statusEl.style.display = 'block';
     statusEl.textContent = 'Connecting…';
-    await load();
+    appEl.style.display = 'none';
+    try {
+      await load();
+    } catch (e) {
+      statusEl.innerHTML = '';
+      statusEl.appendChild(el('p', '', 'Couldn\'t load your data (' + (e.code || e.message || 'error') + '). Nothing was changed.'));
+      const retry = el('button', '', 'Try again');
+      retry.addEventListener('click', () => connect(docId));
+      const change = el('button', '', 'Change sync ID');
+      change.style.marginLeft = '8px';
+      change.addEventListener('click', () => document.getElementById('change-sync-id').click());
+      statusEl.appendChild(retry);
+      statusEl.appendChild(change);
+      return;
+    }
     statusEl.style.display = 'none';
     appEl.style.display = 'block';
     render();   // again now that widths are known (calendar fits its column)
@@ -529,6 +544,10 @@
       requestAnimationFrame(() => document.getElementById('log-text').focus());
     }
   }
+
+  document.getElementById('setup-show').addEventListener('change', (e) => {
+    setupInput.type = e.target.checked ? 'text' : 'password';
+  });
 
   setupEl.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -542,6 +561,7 @@
   document.getElementById('change-sync-id').addEventListener('click', (e) => {
     e.preventDefault();
     appEl.style.display = 'none';
+    statusEl.style.display = 'none';
     setupInput.value = localStorage.getItem(DOC_ID_KEY) || '';
     setupEl.style.display = 'block';
     setupInput.focus();
@@ -700,12 +720,19 @@
   }
 
   // ---------- persistence ----------
+  // 'ok' = document loaded, 'empty' = no document under this sync ID yet,
+  // 'failed' = couldn't read it. Saving is blocked unless the load succeeded, so a
+  // failed or wrong-ID load can never overwrite real data with an empty page.
+  let loadState = 'pending';
   async function load() {
     try {
       const snap = await getDoc(docRef);
-      if (snap.exists()) data = snap.data();
+      if (snap.exists()) { data = snap.data(); loadState = 'ok'; }
+      else { data = { bets: [], log: [] }; loadState = 'empty'; }
     } catch (e) {
       console.error('load failed', e);
+      loadState = 'failed';
+      throw e;
     }
     data.bets = data.bets || [];
     data.log = data.log || [];
@@ -713,6 +740,10 @@
   }
 
   async function save() {
+    if (loadState !== 'ok' && loadState !== 'empty') {
+      alert('Not saved: your data never loaded on this device, so saving could overwrite it. Reload the app and try again.');
+      return;
+    }
     try {
       await setDoc(docRef, data);
     } catch (e) {
@@ -739,6 +770,11 @@
 
   function renderNudge() {
     const nudge = document.getElementById('nudge');
+    if (loadState === 'empty' && !data.bets.length && !data.log.length) {
+      nudge.style.display = 'block';
+      nudge.textContent = 'No data found for this sync ID. If you already have notes on another device, check ⚙ → Change sync ID before adding anything here.';
+      return;
+    }
     const log = liveLog();
     if (!log.length) { nudge.style.display = 'none'; return; }
     const lastEntry = [...log].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
