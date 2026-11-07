@@ -291,6 +291,22 @@
   .compose-hint .ai-note { color: var(--ai); }
   .ai-suggest { color: var(--ai); }
   .compose-hint .err { color: var(--danger-text); }
+  /* v3.0: summaries / story */
+  .sum-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--accent-soft); color: var(--text); border-radius: 10px; padding: 10px 14px; font-size: 14px; margin-bottom: 1.5rem; }
+  .sum-banner .grow { flex: 1; min-width: 180px; }
+  .sum-banner .small-muted { display: block; }
+  .story-text { font-size: 13px; line-height: 1.5; margin: 0; }
+  .story-text h4 { font-size: 14px; margin: 0 0 4px; }
+  .story-text h5 { font-size: 13px; margin: 10px 0 2px; color: var(--text-secondary); }
+  .story-text ul { margin: 2px 0 0; padding-left: 18px; }
+  .story-text p { margin: 4px 0; }
+  .story-card { background: var(--surface); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+  .story-card.header { border-left: 3px solid var(--ai); }
+  .story-row { display: flex; align-items: center; gap: 10px; width: 100%; background: var(--surface); border: none; border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; text-align: left; cursor: pointer; font-size: 14px; }
+  .story-row .nm { flex: 1; font-weight: 600; }
+  .story-row .meta { font-size: 12px; color: var(--text-muted); }
+  .story-open { background: var(--surface); border-radius: 0 0 10px 10px; padding: 0 12px 10px; margin: -8px 0 8px; }
+  .draft-ta { font-size: 14px; line-height: 1.55; min-height: 240px; }
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; cursor: zoom-out; }
   .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
 </style>
@@ -312,6 +328,7 @@
 
   <div id="app" style="display:none;">
     <div id="nudge" class="nudge"></div>
+    <div id="sum-banner"></div>
 
     <div class="layout">
       <main class="col-main">
@@ -373,6 +390,12 @@
             <div id="review"></div>
           </div>
         </section>
+        <section class="fold" id="fold-story">
+          <button class="fold-head" type="button" aria-expanded="true">
+            <h2>Story</h2><span class="fold-sum" id="story-sum"></span><span class="fold-chev">▸</span>
+          </button>
+          <div class="fold-body"><div id="story"></div></div>
+        </section>
       </aside>
     </div>
 
@@ -403,7 +426,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '2.9';
+  const APP_VERSION = '3.0';
   const APP_UPDATED = '2026-11-07';
 
   const app = initializeApp(firebaseConfig);
@@ -701,6 +724,8 @@
   // ---------- render ----------
   function render() {
     renderNudge();
+    renderSummaryBanner();
+    renderStory();
     renderFoldSummaries();
     renderBets();
     renderFutureBets();
@@ -1002,7 +1027,8 @@
 
   document.getElementById('settings-slot').appendChild((() => {
     const k = kebabMenu([
-      ['Export activity log (.csv)', () => document.getElementById('export-activity-btn').click()],
+      ['Export (layered) .csv', () => exportLayered()],
+      ['Export all notes (.csv)', () => document.getElementById('export-activity-btn').click()],
       ['Export versions table (.csv)', () => document.getElementById('export-versions-btn').click()],
       ['Import plan…', () => importInput.click()],
       ['Change sync ID…', () => document.getElementById('change-sync-id').click()],
@@ -2319,6 +2345,350 @@
   logComposer.ta.addEventListener('input', () => { if (hintMsg && hintMsg.classList.contains('err')) { hintMsg = null; renderComposeHint(); } });
   renderComposeHint();
   refreshSuggestBtn();
+
+  // =====================================================================
+  // Summaries: compress the log in three layers so nothing has to re-read an
+  // ever-growing pile of notes.
+  //   - this month: raw notes
+  //   - earlier months of this quarter: one summary per month
+  //   - earlier quarters: one chapter per quarter (written once from its three
+  //     month summaries and then KEPT, never re-summarised), plus a short
+  //     "where things stand" header rebuilt from all chapters each quarter.
+  // Summaries are organised per bet with dated facts, drafted by Claude,
+  // reviewed/edited by you, then saved. Raw notes are never deleted.
+  //   data.summaries = { months: {'2026-10': S}, quarters: {'2026-Q3': S}, header: S & {asof:'2026-Q3'} }
+  //   S = { text, created, edited?, model? }
+  // =====================================================================
+  const SUM_MODEL = 'claude-sonnet-5-5';
+  const monthKey = d => { const x = new Date(d); return x.getFullYear() + '-' + pad2(x.getMonth() + 1); };
+  const quarterOfMonth = mk => { const [y, m] = mk.split('-').map(Number); return y + '-Q' + (Math.floor((m - 1) / 3) + 1); };
+  const quarterMonths = qk => { const [y, q] = qk.split('-Q').map(Number); return [1, 2, 3].map(i => y + '-' + pad2((q - 1) * 3 + i)); };
+  const nextMonth = mk => { const [y, m] = mk.split('-').map(Number); return m === 12 ? (y + 1) + '-01' : y + '-' + pad2(m + 1); };
+  const monthLabel = mk => { const [y, m] = mk.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }); };
+  const quarterLabel = qk => qk.replace('-Q', ' Q').replace(/^(\d+) (Q\d)$/, '$2 $1');
+  function sums() {
+    data.summaries = data.summaries || {};
+    data.summaries.months = data.summaries.months || {};
+    data.summaries.quarters = data.summaries.quarters || {};
+    return data.summaries;
+  }
+  const notesInMonth = mk => liveLog().filter(e => monthKey(e.date) === mk).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // Completed periods that still need a summary, in the order they should be written:
+  // months, then each finished quarter's chapter, then the header for the latest chapter.
+  function pendingSummaries() {
+    const log = liveLog();
+    if (!log.length) return [];
+    const S = sums();
+    const curMonth = monthKey(new Date()), curQuarter = quarterOfMonth(curMonth);
+    const first = monthKey(log.reduce((a, b) => new Date(a.date) < new Date(b.date) ? a : b).date);
+    const out = [];
+    let latestChapter = null, headerAt = 0;
+    for (let mk = first; mk < curMonth; mk = nextMonth(mk)) {
+      if (!S.months[mk] && notesInMonth(mk).length) out.push({ kind: 'month', key: mk });
+      const qk = quarterOfMonth(mk);
+      if (quarterMonths(qk)[2] === mk && qk < curQuarter && quarterMonths(qk).some(m => notesInMonth(m).length)) {
+        if (!S.quarters[qk]) out.push({ kind: 'quarter', key: qk });
+        latestChapter = qk;
+        headerAt = out.length;                     // header goes right after the latest chapter
+      }
+    }
+    // Only the newest header matters; it is rebuilt from all kept chapters.
+    if (latestChapter && (!S.header || S.header.asof !== latestChapter)) out.splice(headerAt, 0, { kind: 'header', key: latestChapter });
+    return out;
+  }
+
+  // Plain-text rendering of notes for prompts and exports.
+  function noteLine(e) {
+    const bn = entryBets(e).map(b => b.name).join(' + ');
+    const na = (e.attachments || []).length;
+    return '- ' + fmtDay(e.date) + (bn ? ' [' + bn + ']' : ' [general]') + (e.ai ? ' (AI summary)' : '') + ': ' +
+      (e.text || '').replace(/\n+/g, ' / ') + (na ? ' (' + plural(na, 'picture', 'pictures') + ')' : '');
+  }
+  function betsContext() {
+    return data.bets.map(b => '- ' + b.name + ' — ' + STATUS_LABEL[betStatus(b)] +
+      (b.closed ? ' ' + fmtDate(b.closed) : '') + (b.why ? '\n  why: ' + b.why.replace(/\s+/g, ' ') : '') +
+      (b.outcome ? '\n  outcome: ' + b.outcome.replace(/\s+/g, ' ') : '')).join('\n');
+  }
+
+  // The layered view "as of" a month: story header + chapters before that month's
+  // quarter, month summaries earlier in the quarter, then raw notes of the month.
+  // Months that were never summarised fall back to their raw notes, so nothing is lost.
+  function layeredSections(asOfMonth, opts = {}) {
+    const S = sums();
+    const q = quarterOfMonth(asOfMonth);
+    const sec = [];
+    if (S.header && S.header.asof < q) sec.push({ layer: 'story', period: 'as of ' + quarterLabel(S.header.asof), text: S.header.text });
+    Object.keys(S.quarters).filter(k => k < q).sort().forEach(k => sec.push({ layer: 'chapter', period: k, text: S.quarters[k].text }));
+    // Quarters before `q` without a chapter: use their month summaries / raw notes.
+    const allMonths = [...new Set(liveLog().map(e => monthKey(e.date)))].sort();
+    allMonths.filter(m => quarterOfMonth(m) < q && !S.quarters[quarterOfMonth(m)]).forEach(m => {
+      if (S.months[m]) sec.push({ layer: 'month', period: m, text: S.months[m].text });
+      else notesInMonth(m).forEach(e => sec.push({ layer: 'note', period: m, note: e }));
+    });
+    quarterMonths(q).filter(m => m < asOfMonth).forEach(m => {
+      if (S.months[m]) sec.push({ layer: 'month', period: m, text: S.months[m].text });
+      else notesInMonth(m).forEach(e => sec.push({ layer: 'note', period: m, note: e }));
+    });
+    if (opts.includeMonth !== false) {
+      allMonths.filter(m => m >= asOfMonth).forEach(m => notesInMonth(m).forEach(e => sec.push({ layer: 'note', period: m, note: e })));
+    }
+    return sec;
+  }
+  function sectionsToText(sec) {
+    const L = [];
+    let lastLayer = null, lastPeriod = null;
+    sec.forEach(x => {
+      if (x.layer === 'note') {
+        if (lastLayer !== 'note' || lastPeriod !== x.period) L.push('', '### Notes — ' + monthLabel(x.period));
+        L.push(noteLine(x.note));
+      } else {
+        L.push('', x.layer === 'story' ? '### Story so far (' + x.period + ')' : x.layer === 'chapter' ? '### Chapter ' + quarterLabel(x.period) : '### Summary — ' + monthLabel(x.period), x.text.trim());
+      }
+      lastLayer = x.layer; lastPeriod = x.period;
+    });
+    return L.join('\n').trim();
+  }
+
+  const SUM_RULES =
+    'Rules:\n' +
+    '- Organise by bet: one "### <bet name>" section per bet that had activity, then "### General" for notes with no bet. Skip bets with no activity.\n' +
+    '- Under each, dated bullets ("- 14 Oct: …") of what happened, decisions and WHY, and the state at the end of the period.\n' +
+    '- Keep concrete facts exactly: dates, part numbers, drawing numbers, supplier and people names, quantities, costs, lead times. Never invent or generalise them away.\n' +
+    '- Only use what the material says. No advice, no praise, no filler. Plain markdown, no preamble.';
+
+  function buildPrompt(item) {
+    const S = sums();
+    if (item.kind === 'month') {
+      const ctx = layeredSections(item.key, { includeMonth: false });
+      return {
+        system: 'You maintain the work history of a manufacturing engineer at Teledyne Gavia (AUV maker). ' +
+          'His job: products built at high quality, best reliability and cycle times, low cost.\n' +
+          'Write the summary of ONE month from that month\'s raw log notes. Earlier history is given only as context — do not summarise it again.\n' +
+          'Start with "## ' + monthLabel(item.key) + '".\n' + SUM_RULES,
+        user: 'Bets (current state):\n' + betsContext() +
+          (ctx.length ? '\n\nEarlier history (context only):\n' + sectionsToText(ctx) : '') +
+          '\n\nRaw notes for ' + monthLabel(item.key) + ':\n' + notesInMonth(item.key).map(noteLine).join('\n'),
+      };
+    }
+    if (item.kind === 'quarter') {
+      const months = quarterMonths(item.key);
+      return {
+        system: 'You maintain the work history of a manufacturing engineer at Teledyne Gavia (AUV maker).\n' +
+          'Write the chapter for ONE quarter by consolidating its monthly summaries (raw notes are given for any month without a summary). ' +
+          'This chapter is kept permanently and never re-summarised, so it must stand on its own.\n' +
+          'Start with "## ' + quarterLabel(item.key) + '". For each bet: when it started or what state it entered the quarter in, the dated milestones and decisions (with why), and its state at quarter end.\n' + SUM_RULES,
+        user: 'Bets (current state):\n' + betsContext() + '\n\n' + months.map(m => S.months[m]
+          ? '### Summary — ' + monthLabel(m) + '\n' + S.months[m].text.trim()
+          : (notesInMonth(m).length ? '### Notes — ' + monthLabel(m) + '\n' + notesInMonth(m).map(noteLine).join('\n') : '')).filter(Boolean).join('\n\n'),
+      };
+    }
+    // header: rebuilt from ALL kept chapters, never from the previous header
+    const chapters = Object.keys(S.quarters).filter(k => k <= item.key).sort();
+    return {
+      system: 'You maintain the work history of a manufacturing engineer at Teledyne Gavia (AUV maker).\n' +
+        'Write a short "Where things stand" overview as of the end of ' + quarterLabel(item.key) + ', from the quarterly chapters below. ' +
+        'At most ~250 words: one bullet per active bet (state, last milestone with date, what blocks it), one line per bet closed so far (outcome), and recurring themes worth knowing. ' +
+        'Start with "## Where things stand — ' + quarterLabel(item.key) + '". Keep dates and names exact; nothing that is not in the chapters.',
+      user: 'Bets (current state):\n' + betsContext() + '\n\n' + chapters.map(k => '### Chapter ' + quarterLabel(k) + '\n' + S.quarters[k].text.trim()).join('\n\n'),
+    };
+  }
+
+  async function ensureKey() {
+    let key = aiKey();
+    if (key) return key;
+    const v = prompt('Paste an Anthropic API key so Claude can draft summaries. It is stored only in this browser.');
+    if (!v || !v.trim()) return null;
+    try { localStorage.setItem(AI_KEY, v.trim()); } catch (e) {}
+    return v.trim();
+  }
+  async function callClaude(model, system, user, maxTokens) {
+    const key = await ensureKey();
+    if (!key) throw new Error('No API key');
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json', 'x-api-key': key,
+        'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 401) { try { localStorage.removeItem(AI_KEY); } catch (e) {} }
+    if (!res.ok) throw new Error((body.error && body.error.message) || ('HTTP ' + res.status));
+    const text = (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('').trim();
+    if (!text) throw new Error('Empty response');
+    return text;
+  }
+
+  const itemTitle = it => it.kind === 'month' ? monthLabel(it.key) + ' summary'
+    : it.kind === 'quarter' ? 'Chapter ' + quarterLabel(it.key) : 'Where things stand — ' + quarterLabel(it.key);
+  const storedFor = it => { const S = sums(); return it.kind === 'month' ? S.months[it.key] : it.kind === 'quarter' ? S.quarters[it.key] : S.header; };
+
+  function renderSummaryBanner() {
+    const box = document.getElementById('sum-banner');
+    box.innerHTML = '';
+    const pend = pendingSummaries();
+    if (!pend.length) return;
+    const it = pend[0];
+    const b = el('div', 'sum-banner');
+    const t = el('div', 'grow');
+    t.appendChild(el('strong', '', it.kind === 'month' ? monthLabel(it.key) + ' has ended.' : it.kind === 'quarter' ? quarterLabel(it.key) + ' has ended.' : 'New chapter saved.'));
+    t.appendChild(document.createTextNode(' ' + (it.kind === 'month' ? 'Write its summary?' : it.kind === 'quarter' ? 'Write the quarter chapter?' : 'Refresh "where things stand"?')));
+    if (pend.length > 1) t.appendChild(el('span', 'small-muted', plural(pend.length - 1, 'more waiting after this', 'more waiting after this')));
+    b.appendChild(t);
+    const go = el('button', 'small', '✦ Draft it');
+    go.addEventListener('click', () => openDraftSheet(it, { generate: true }));
+    b.appendChild(go);
+    box.appendChild(b);
+  }
+
+  // Draft / edit sheet. generate=true asks Claude first; the text is editable and only
+  // saved when you press Save.
+  function openDraftSheet(item, { generate }) {
+    const back = el('div', 'sheet-back');
+    back.id = 'draft-sheet';
+    const sheet = el('div', 'sheet');
+    const head = el('div', 'sheet-head');
+    const title = el('div', 'sheet-title');
+    title.appendChild(el('strong', '', itemTitle(item)));
+    const status = el('span', '', '');
+    title.appendChild(status);
+    const x = el('button', 'icon-btn', '×');
+    x.addEventListener('click', () => back.remove());
+    head.appendChild(title);
+    head.appendChild(x);
+    const body = el('div', 'sheet-body');
+    const ta = el('textarea', 'draft-ta');
+    const cur = storedFor(item);
+    ta.value = cur ? cur.text : '';
+    body.appendChild(ta);
+    const foot = el('div', 'imp-foot');
+    const regen = el('button', '', '✦ Redraft');
+    const cancel = el('button', '', 'Cancel');
+    const saveB = el('button', '', 'Save');
+    saveB.style.background = 'var(--accent)'; saveB.style.color = 'var(--bg)'; saveB.style.borderColor = 'var(--accent)';
+    foot.appendChild(regen); foot.appendChild(cancel); foot.appendChild(saveB);
+    sheet.appendChild(head); sheet.appendChild(body); sheet.appendChild(foot);
+    back.appendChild(sheet);
+    document.body.appendChild(back);
+    requestAnimationFrame(() => autosize(ta));
+    let usedModel = cur ? cur.model : null;
+
+    const draft = async () => {
+      regen.disabled = saveB.disabled = true;
+      status.textContent = 'Claude is drafting… (about 20–60 s)';
+      try {
+        const pr = buildPrompt(item);
+        ta.value = await callClaude(SUM_MODEL, pr.system, pr.user, item.kind === 'header' ? 1500 : 6000);
+        usedModel = SUM_MODEL;
+        status.textContent = 'Draft — read and edit, then Save';
+      } catch (e) {
+        console.error(e);
+        status.textContent = 'Failed: ' + e.message;
+      } finally {
+        regen.disabled = saveB.disabled = false;
+        autosize(ta);
+      }
+    };
+    regen.addEventListener('click', draft);
+    cancel.addEventListener('click', () => back.remove());
+    saveB.addEventListener('click', async () => {
+      const text = ta.value.trim();
+      if (!text) return;
+      const S = sums();
+      const now = new Date().toISOString();
+      const prev = storedFor(item);
+      const rec = { text, created: prev ? prev.created : now, model: usedModel || undefined };
+      if (prev) rec.edited = now;
+      if (item.kind === 'month') S.months[item.key] = rec;
+      else if (item.kind === 'quarter') S.quarters[item.key] = rec;
+      else S.header = Object.assign(rec, { asof: item.key });
+      Object.keys(rec).forEach(k => rec[k] === undefined && delete rec[k]);
+      back.remove();
+      render();
+      await save();
+      showToast(itemTitle(item) + ' saved');
+    });
+    if (generate) draft(); else status.textContent = cur ? 'Saved ' + fmtDate(cur.edited || cur.created) : '';
+  }
+
+  // Minimal, safe markdown for summaries: ## / ### headings, - bullets, **bold**, paragraphs.
+  function mdBlock(text) {
+    const root = el('div', 'story-text');
+    let ul = null;
+    const inline = (node, str) => str.split(/(\*\*[^*]+\*\*)/).forEach(part => {
+      if (/^\*\*[^*]+\*\*$/.test(part)) node.appendChild(el('strong', '', part.slice(2, -2)));
+      else if (part) node.appendChild(document.createTextNode(part));
+    });
+    text.split('\n').forEach(line => {
+      const t = line.trim();
+      if (!t) { ul = null; return; }
+      let m;
+      if ((m = t.match(/^#{1,2}\s+(.*)/))) { ul = null; const h = el('h4'); inline(h, m[1]); root.appendChild(h); }
+      else if ((m = t.match(/^#{3,6}\s+(.*)/))) { ul = null; const h = el('h5'); inline(h, m[1]); root.appendChild(h); }
+      else if ((m = t.match(/^[-*]\s+(.*)/))) { if (!ul) { ul = el('ul'); root.appendChild(ul); } const li = el('li'); inline(li, m[1]); ul.appendChild(li); }
+      else { ul = null; const p = el('p'); inline(p, t); root.appendChild(p); }
+    });
+    return root;
+  }
+
+  // Story section in the sidebar: header, kept chapters, month summaries.
+  let openStoryKey = null;
+  function renderStory() {
+    const S = sums();
+    const box = document.getElementById('story');
+    box.innerHTML = '';
+    const chapters = Object.keys(S.quarters).sort().reverse();
+    const months = Object.keys(S.months).sort().reverse();
+    document.getElementById('story-sum').textContent = S.header ? 'as of ' + quarterLabel(S.header.asof) + ' · ' + plural(chapters.length + months.length, 'summary', 'summaries')
+      : (months.length ? plural(months.length, 'month summary', 'month summaries') : 'no summaries yet');
+    if (!S.header && !chapters.length && !months.length) {
+      box.appendChild(el('p', 'muted', 'Monthly summaries appear here after each month ends.'));
+      return;
+    }
+    if (S.header) {
+      const c = el('div', 'story-card header');
+      c.appendChild(mdBlock(S.header.text));
+      const a = el('div', 'card-actions');
+      a.appendChild(linkBtn('Edit', () => openDraftSheet({ kind: 'header', key: S.header.asof }, { generate: false })));
+      a.appendChild(linkBtn('Redraft', () => openDraftSheet({ kind: 'header', key: S.header.asof }, { generate: true })));
+      c.appendChild(a);
+      box.appendChild(c);
+    }
+    const row = (item, label, rec) => {
+      const k = item.kind + ':' + item.key;
+      const r = el('button', 'story-row');
+      r.type = 'button';
+      r.appendChild(el('span', 'nm', label));
+      r.appendChild(el('span', 'meta', (rec.edited ? 'edited ' : '') + fmtDate(rec.edited || rec.created)));
+      r.addEventListener('click', () => { openStoryKey = openStoryKey === k ? null : k; renderStory(); });
+      box.appendChild(r);
+      if (openStoryKey === k) {
+        const o = el('div', 'story-open');
+        o.appendChild(mdBlock(rec.text));
+        const a = el('div', 'card-actions');
+        a.appendChild(linkBtn('Edit', () => openDraftSheet(item, { generate: false })));
+        a.appendChild(linkBtn('Redraft', () => openDraftSheet(item, { generate: true })));
+        o.appendChild(a);
+        box.appendChild(o);
+      }
+    };
+    if (chapters.length) box.appendChild(el('p', 'outcome-label', 'Quarter chapters'));
+    chapters.forEach(k => row({ kind: 'quarter', key: k }, 'Chapter ' + quarterLabel(k), S.quarters[k]));
+    if (months.length) box.appendChild(el('p', 'outcome-label', 'Month summaries'));
+    months.forEach(k => row({ kind: 'month', key: k }, monthLabel(k), S.months[k]));
+  }
+
+  // Default export: the layered view as of today (story, chapters, this quarter's
+  // month summaries, this month's raw notes).
+  function exportLayered() {
+    const sec = layeredSections(monthKey(new Date()));
+    const rows = sec.map(x => x.layer === 'note'
+      ? { layer: 'note', period: x.period, date: x.note.date, bets: entryBets(x.note).map(b => b.name).join(' + '), ai: x.note.ai ? 'yes' : '', text: x.note.text || '' }
+      : { layer: x.layer, period: x.period, date: '', bets: '', ai: 'yes', text: x.text });
+    downloadFile('big-picture-layered-' + dayKey(new Date()) + '.csv', toCsv(rows, ['layer', 'period', 'date', 'bets', 'ai', 'text']), 'text/csv;charset=utf-8;');
+  }
 
   addEntryBtn.addEventListener('click', async () => {
     const text = logComposer.ta.value.trim();
