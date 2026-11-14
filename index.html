@@ -439,7 +439,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '3.4';
+  const APP_VERSION = '3.5';
   const APP_UPDATED = '2026-11-14';
 
   const app = initializeApp(firebaseConfig);
@@ -804,10 +804,8 @@
   }
 
   // ---------- folding side sections + settings ----------
-  // Bets and Review fold to a one-line summary on narrow screens (remembered per
-  // device); on wide screens they sit open in the sticky sidebar.
-  const FOLD_KEY = id => 'bp-fold-' + id;
-  function foldState(id) { try { return localStorage.getItem(FOLD_KEY(id)); } catch (e) { return null; } }
+  // Bets, Review and Story fold to a one-line summary. They always start folded on
+  // load, on every screen size; tap a header to open it for this visit.
   document.querySelectorAll('.fold').forEach(sec => {
     const id = sec.id.replace('fold-', '');
     const head = sec.querySelector('.fold-head');
@@ -815,14 +813,10 @@
       sec.classList.toggle('collapsed', collapsed);
       head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     };
-    // Remembered per device. Defaults: Bets folded everywhere; Review open on wide screens.
-    const saved = foldState(id);
-    const wide = window.matchMedia('(min-width: 900px)').matches;
-    apply(saved ? saved !== 'open' : !(id === 'review' && wide));
+    apply(true);
     head.addEventListener('click', () => {
       const collapsed = !sec.classList.contains('collapsed');
       apply(collapsed);
-      try { localStorage.setItem(FOLD_KEY(id), collapsed ? 'closed' : 'open'); } catch (e) {}
       if (!collapsed) requestAnimationFrame(() => sec.querySelectorAll('textarea').forEach(autosize));
     });
   });
