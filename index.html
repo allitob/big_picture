@@ -207,6 +207,10 @@
   .legend .cell { width: 10px; height: 10px; border-radius: 2px; }
   .log-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
   .log-head .seg { margin-bottom: 0; }
+  /* v3.4: log for another day */
+  .day-pick { display: flex; align-items: center; gap: 10px; }
+  .day-pick input[type=date] { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); width: auto; }
+  .composer.backdate textarea { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
   .sheet-back { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
   .sheet { background: var(--bg); width: 100%; max-width: 560px; max-height: 82vh; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; box-shadow: 0 -4px 24px rgba(0,0,0,0.2); }
   @media (min-width: 640px) { .sheet-back { align-items: center; } .sheet { border-radius: 16px; max-height: 80vh; } }
@@ -336,7 +340,13 @@
     <div class="layout">
       <main class="col-main">
         <div class="section">
-          <h2 style="margin-bottom:0.75rem;">Log today</h2>
+          <div class="log-head">
+            <h2 id="log-day-title">Log today</h2>
+            <div class="day-pick">
+              <a id="log-day-reset" class="link-btn" style="display:none;">Back to today</a>
+              <input id="log-day" type="date" title="Log a note for another day" />
+            </div>
+          </div>
           <div id="log-bet-chips" class="chips"></div>
           <div id="log-composer" class="composer"></div>
         </div>
@@ -429,8 +439,8 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '3.3';
-  const APP_UPDATED = '2026-11-07';
+  const APP_VERSION = '3.4';
+  const APP_UPDATED = '2026-11-14';
 
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
@@ -2290,6 +2300,33 @@
   addEntryBtn.id = 'save-log-btn';
   logComposer.bar.prepend(addEntryBtn);
   document.getElementById('log-composer').appendChild(logComposer.root);
+  // Which day "Log today" writes to. null = today (rolls over at midnight on its own).
+  let composeDay = null;
+  const logDayInput = document.getElementById('log-day');
+  const LOG_PLACEHOLDER = logComposer.ta.placeholder;
+  function renderComposeDay() {
+    const todayK = dayKey(new Date());
+    if (composeDay && composeDay >= todayK) composeDay = null;
+    logDayInput.max = todayK;
+    logDayInput.value = composeDay || todayK;
+    const other = !!composeDay;
+    document.getElementById('log-day-title').textContent = other
+      ? 'Log for ' + keyToDate(composeDay).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+      : 'Log today';
+    document.getElementById('log-day-reset').style.display = other ? '' : 'none';
+    logComposer.root.classList.toggle('backdate', other);
+    logComposer.ta.placeholder = other
+      ? 'What did you spend attention on that day? (Paste or drop pictures here)'
+      : LOG_PLACEHOLDER;
+  }
+  logDayInput.addEventListener('change', () => {
+    composeDay = logDayInput.value && logDayInput.value < dayKey(new Date()) ? logDayInput.value : null;
+    renderComposeDay();
+    logComposer.ta.focus();
+  });
+  document.getElementById('log-day-reset').addEventListener('click', () => { composeDay = null; renderComposeDay(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) renderComposeDay(); });
+  renderComposeDay();
   const composeHint = el('div', 'compose-hint');
   logComposer.root.insertBefore(composeHint, logComposer.ta.nextSibling);
 
@@ -2741,12 +2778,20 @@
     addEntryBtn.textContent = 'Saving…';
     try {
       const attachments = await logComposer.commit();
-      const date = new Date().toISOString();
+      const now = new Date();
+      let d = now;
+      if (composeDay) {   // another day: that date at the current time of day
+        d = keyToDate(composeDay);
+        d.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+      }
+      const date = d.toISOString();
       const entry = { id: 'log_' + Date.now(), text, date, history: [{ v: 1, date, text }] };
+      if (composeDay) entry.written = now.toISOString();   // when it was actually typed in
       if (logComposer.state.ai) entry.ai = true;
       setEntryBets(entry, [...composeBets]);
       if (attachments.length) entry.attachments = attachments;
       data.log.push(entry);
+      if (composeDay) showToast('Added to ' + fmtDay(date));
       logComposer.reset();
       composeBets.clear();
       chipsOpen = false;
