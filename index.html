@@ -210,6 +210,7 @@
   /* v3.4: log for another day */
   .day-pick { display: flex; align-items: center; gap: 10px; }
   .day-pick input[type=date] { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); width: auto; }
+  .edit-day { margin-bottom: 10px; }
   .composer.backdate textarea { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
   .sheet-back { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
   .sheet { background: var(--bg); width: 100%; max-width: 560px; max-height: 82vh; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; box-shadow: 0 -4px 24px rgba(0,0,0,0.2); }
@@ -439,7 +440,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '3.6';
+  const APP_VERSION = '3.7';
   const APP_UPDATED = '2026-11-14';
 
   const app = initializeApp(firebaseConfig);
@@ -1932,6 +1933,15 @@
       const chips = el('div', 'chips');
       renderBetChips(chips, sel);
       const comp = makeComposer({ text: entry.text || '', atts: entry.attachments || [], ai: !!entry.ai });
+      // Move the note to another day (keeps its time of day).
+      const dateRow = el('div', 'day-pick edit-day');
+      dateRow.appendChild(el('span', 'small-muted', 'Date'));
+      const dateIn = el('input');
+      dateIn.type = 'date';
+      dateIn.value = dayKey(entry.date);
+      dateIn.max = dayKey(new Date());
+      dateRow.appendChild(dateIn);
+      wrapper.appendChild(dateRow);
       const saveBtn = el('button', '', 'Save');
       const cancelBtn = el('button', '', 'Cancel');
       comp.bar.prepend(cancelBtn);
@@ -1951,6 +1961,16 @@
             entry.history.push({ v: entry.history.length + 1, date: new Date().toISOString(), text: newText });
           }
           entry.text = newText;
+          const newDay = dateIn.value;
+          if (newDay && newDay !== dayKey(entry.date) && newDay <= dayKey(new Date())) {
+            const old = new Date(entry.date);
+            const d = keyToDate(newDay);
+            d.setHours(old.getHours(), old.getMinutes(), old.getSeconds());
+            if (!entry.originalDate) entry.originalDate = entry.date;
+            entry.date = d.toISOString();
+            if (openDay) openDay = newDay;   // day card follows the note
+            showToast('Moved to ' + fmtDay(entry.date));
+          }
           setEntryBets(entry, [...sel]);
           if (attachments.length) entry.attachments = attachments; else delete entry.attachments;
           if (comp.state.ai) entry.ai = true; else delete entry.ai;
