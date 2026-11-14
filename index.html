@@ -439,7 +439,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '3.5';
+  const APP_VERSION = '3.6';
   const APP_UPDATED = '2026-11-14';
 
   const app = initializeApp(firebaseConfig);
@@ -1074,6 +1074,7 @@
       ['Export versions table (.csv)', () => document.getElementById('export-versions-btn').click()],
       ['Import plan…', () => importInput.click()],
       ['Change sync ID…', () => document.getElementById('change-sync-id').click()],
+      ['Haiku API key…', () => setAiKey()],
     ]);
     const b = k.querySelector('.kebab');
     b.textContent = '⚙';
@@ -2331,6 +2332,15 @@
   const AI_MODEL = 'claude-haiku-5-5';
   const desktopKeys = window.matchMedia('(pointer: fine)').matches;
   function aiKey() { try { return localStorage.getItem(AI_KEY) || ''; } catch (e) { return ''; } }
+  // Settings → "Haiku API key…": replace or clear the key stored on this device.
+  function setAiKey() {
+    const cur = aiKey();
+    const v = prompt((cur ? 'Current key on this device: …' + cur.slice(-4) + '\n' : 'No key saved on this device.\n') +
+      'Paste a new Anthropic API key (leave empty to remove it).', '');
+    if (v === null) return;   // cancelled
+    try { v.trim() ? localStorage.setItem(AI_KEY, v.trim()) : localStorage.removeItem(AI_KEY); } catch (e) {}
+    showToast(v.trim() ? 'Haiku API key saved on this device' : 'Haiku API key removed');
+  }
   let hintMsg = null;                       // {html} override while/after a suggestion
   function renderComposeHint() {
     composeHint.innerHTML = '';
@@ -2393,7 +2403,7 @@
         }),
       });
       const body = await res.json().catch(() => ({}));
-      if (res.status === 401) { try { localStorage.removeItem(AI_KEY); } catch (e) {} }   // bad key: ask again next time
+      if (res.status === 401 || res.status === 403) { try { localStorage.removeItem(AI_KEY); } catch (e) {} }   // bad key: ask again next time
       if (!res.ok) throw new Error((body.error && body.error.message) || ('HTTP ' + res.status));
       const out = (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
       const m = out.match(/\{[\s\S]*\}/);
@@ -2589,7 +2599,7 @@
       body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
     });
     const body = await res.json().catch(() => ({}));
-    if (res.status === 401) { try { localStorage.removeItem(AI_KEY); } catch (e) {} }
+    if (res.status === 401 || res.status === 403) { try { localStorage.removeItem(AI_KEY); } catch (e) {} }
     if (!res.ok) throw new Error((body.error && body.error.message) || ('HTTP ' + res.status));
     const text = (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('').trim();
     if (!text) throw new Error('Empty response');
