@@ -440,7 +440,7 @@
 
   // Bump APP_VERSION and APP_UPDATED when shipping a change. The date is
   // refreshed from GitHub's last commit to index.html when reachable.
-  const APP_VERSION = '3.7';
+  const APP_VERSION = '3.8';
   const APP_UPDATED = '2026-11-14';
 
   const app = initializeApp(firebaseConfig);
@@ -2416,7 +2416,7 @@
           model: AI_MODEL,
           max_tokens: 1024,
           system: 'You tag work-log notes written by a manufacturing engineer with the "bets" (multi-week initiatives) they belong to.\n' +
-            'Pick only bets the note is clearly about — usually 0 to 2, at most 3. A passing mention is not enough. ' +
+            'Pick every bet the note is clearly about, however many that is. A passing mention is not enough. ' +
             'If nothing fits, return an empty list (it becomes a general note).\n' +
             'Reply with JSON only, no prose: {"bet_ids": ["<id>", ...]}\n\nActive bets:\n' + betBriefs(),
           messages: [{ role: 'user', content: 'Note:\n' + text }],
